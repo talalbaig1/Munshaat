@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ElderWise / SilaCares — Monshaat Action Tracker</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#fff; --text:#172033; --muted:#667085;
+    --line:#e4e7ec; --accent:#155eef; --green:#12b76a; --amber:#f79009;
+    --red:#f04438; --purple:#7a5af8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:1200px;margin:auto;padding:28px 18px 60px}
+  header{background:linear-gradient(135deg,#101828,#1d2939);color:#fff;border-radius:18px;padding:28px;margin-bottom:18px}
+  h1{margin:0 0 6px;font-size:28px}.subtitle{color:#d0d5dd}
+  .notice{margin-top:16px;padding:12px 14px;border-radius:10px;background:#344054;color:#eaecf0;font-size:13px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .stat b{font-size:24px;display:block}.stat span{color:var(--muted);font-size:13px}
+  .progress{height:9px;background:#eaecf0;border-radius:20px;overflow:hidden;margin-top:10px}.bar{height:100%;background:var(--accent);width:0;transition:.2s}
+  .controls{position:sticky;top:0;z-index:5;background:rgba(245,247,251,.95);backdrop-filter:blur(8px);padding:10px 0;display:flex;gap:8px;flex-wrap:wrap}
+  button,input,select{font:inherit} button,select,input[type=text]{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 12px}
+  button{cursor:pointer}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .search{flex:1;min-width:220px}
+  .phase{margin-top:22px}.phase h2{font-size:20px;margin:0 0 10px}.phase p{color:var(--muted);margin-top:-5px}
+  .task{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;margin:10px 0;display:grid;grid-template-columns:auto 1fr auto;gap:13px;align-items:start}
+  .task.done{opacity:.62}.task.done .title{text-decoration:line-through}
+  .check{width:21px;height:21px;margin-top:3px;accent-color:var(--green);cursor:pointer}
+  .title{font-weight:700}.desc{color:#475467;margin-top:3px}.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tag{font-size:11px;padding:3px 8px;border-radius:999px;background:#f2f4f7;color:#475467}
+  .p-high{background:#fef3f2;color:#b42318}.p-med{background:#fffaeb;color:#b54708}.p-low{background:#eff8ff;color:#175cd3}
+  .owner{color:var(--muted);font-size:12px;text-align:right;min-width:90px}
+  details{margin-top:7px;color:#475467;font-size:13px}summary{cursor:pointer;color:#344054}
+  .source{border-left:3px solid var(--purple);padding:10px 12px;background:#fff;margin:10px 0;border-radius:8px}
+  .notes{width:100%;min-height:90px;margin-top:9px;border:1px solid var(--line);border-radius:9px;padding:10px;resize:vertical;font:inherit}
+  .note-actions{margin-top:7px}
+  .evidence-box{margin-top:9px;border:1px dashed #98a2b3;border-radius:10px;padding:12px}
+  .upload{display:inline-block;background:#eff8ff;color:#175cd3;border:1px solid #b2ddff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600}
+  .upload input{display:none}
+  .evidence-list{margin-top:10px;display:grid;gap:6px}
+  .evidence-item{display:flex;justify-content:space-between;gap:10px;align-items:center;background:#f9fafb;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px}
+  .evidence-item small{color:var(--muted)}
+  .evidence-item button{padding:4px 7px;font-size:12px}
+  .muted{color:var(--muted);font-size:12px;margin-top:8px}
+
+  .footer{margin-top:30px;color:var(--muted);font-size:12px}
+  @media(max-width:800px){.stats{grid-template-columns:repeat(2,1fr)}.task{grid-template-columns:auto 1fr}.owner{grid-column:2;text-align:left}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Monshaat Recommendations → Execution Tracker</h1>
+  <div class="subtitle">ElderWise / SilaCares — consolidated from five Monshaat consultations, August–September 2026</div>
+  <div class="notice">
+    This tracker translates the consultants' recommendations into practical action items. It is an execution aid, not legal, medical, regulatory, or investment advice. In particular, verify Saudi company/licensing requirements, health-data obligations, and accelerator/hackathon deadlines with the relevant official authorities before acting.
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="done">0</b><span>Completed</span></div>
+  <div class="stat"><b id="total">0</b><span>Total tasks</span></div>
+  <div class="stat"><b id="pct">0%</b><span>Overall progress</span><div class="progress"><div class="bar" id="bar"></div></div></div>
+  <div class="stat"><b id="open">0</b><span>Remaining</span></div>
+</div>
+
+<div class="controls">
+  <input id="search" class="search" type="text" placeholder="Search tasks…">
+  <select id="filter">
+    <option value="all">All tasks</option><option value="open">Open</option><option value="done">Completed</option>
+    <option value="high">High priority</option><option value="verify">Needs verification</option>
+  </select>
+  <button onclick="markVisible(true)">Complete visible</button>
+  <button onclick="markVisible(false)">Reopen visible</button>
+  <button onclick="resetAll()">Reset all</button>
+</div>
+
+<div id="tasks"></div>
+
+<div class="footer">
+  Saved automatically in this browser using localStorage. Checklist status and notes remain after reopening on the same browser/device. Evidence entries record filenames/metadata only; the actual files are not uploaded or embedded.
+</div>
+</div>
+
+<script>
+const tasks = [
+{phase:"1. Foundation & Strategic Focus", intro:"Resolve the biggest strategic uncertainties before spending heavily on product or marketing.",
+title:"Define the single beachhead customer segment",desc:"Choose one initial segment rather than addressing the entire elderly-care market. Start with elderly people who can use WhatsApp/mobile technology, while treating the adult child/caregiver as the likely buyer.",priority:"high",tags:["Strategy","Customer"],source:"Innovation — 10 Aug 2026; Innovation — 24 Sep 2026"},
+{phase:"1. Foundation & Strategic Focus",title:"Write a one-sentence value proposition",desc:"Clearly state the problem, target customer, solution, and benefit for the first segment.",priority:"high",tags:["Strategy","Positioning"],source:"Innovation — 10 Aug 2026"},
+{phase:"1. Foundation & Strategic Focus",title:"Define buyer vs. user",desc:"Document the adult child/caregiver as the economic buyer and the elderly person as the end user, then design messaging and UX accordingly.",priority:"high",tags:["GTM","UX"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+{phase:"1. Foundation & Strategic Focus",title:"Map the product scope and explicitly exclude medical responsibility",desc:"Define what the product does and does not do. Avoid positioning AI reminders, monitoring, or alerts as medical diagnosis, treatment, or professional medical supervision until regulatory requirements are established.",priority:"high",tags:["Product","Legal","Health"],source:"Innovation — 10 Aug 2026; IT — 24 Sep 2026"},
+{phase:"1. Foundation & Strategic Focus",title:"Build a simple business model using an MIT entrepreneurship framework",desc:"Use a structured entrepreneurship methodology to examine customer, value proposition, channels, revenue, costs, differentiation, scalability, and innovation.",priority:"medium",tags:["Business Model"],source:"Innovation — 10 Aug 2026"},
+{phase:"1. Foundation & Strategic Focus",title:"Set an execution schedule around the existing job",desc:"Create protected weekly blocks for product, customer discovery, legal/company setup, applications, and fundraising so employment does not continuously delay the venture.",priority:"high",tags:["Execution","Time"],source:"Innovation — 10 Aug 2026"},
+
+{phase:"2. Product & MVP",intro:"Turn the current MVP into a controlled, testable product rather than trying to launch everything at once.",
+title:"Strengthen the MVP around WhatsApp + AI",desc:"Build the first usable workflow around AI assistance and WhatsApp, prioritizing simplicity and real user value.",priority:"high",tags:["MVP","AI","WhatsApp"],source:"Innovation — 10 Aug 2026"},
+{phase:"2. Product & MVP",title:"Add medication reminders as a controlled MVP feature",desc:"Implement reminders in a way that does not imply medical advice or clinical responsibility. Define escalation, disclaimers, and failure handling before real-world testing.",priority:"high",tags:["MVP","Health","Safety"],source:"Innovation — 10 Aug 2026"},
+{phase:"2. Product & MVP",title:"Automate alerts and periodic caregiver reports",desc:"Create simple notifications/reports for caregivers while keeping the experience understandable and operationally safe.",priority:"high",tags:["Product","Automation"],source:"IT — 24 Sep 2026"},
+{phase:"2. Product & MVP",title:"Simplify the elderly-user experience",desc:"Design large, clear, low-complexity interfaces and flows suitable for elderly users. Test usability rather than assuming the design works.",priority:"high",tags:["UX","Accessibility"],source:"IT — 24 Sep 2026"},
+{phase:"2. Product & MVP",title:"Use rapid application-building tools where appropriate",desc:"Evaluate low-code/no-code or rapid development platforms for the first version to reduce cost and shorten the validation cycle.",priority:"medium",tags:["MVP","Cost"],source:"Innovation — 10 Aug 2026"},
+{phase:"2. Product & MVP",title:"Define MVP success metrics before the pilot",desc:"Choose measurable targets such as activation, weekly usage, reminder completion, caregiver engagement, retention, willingness to pay, and support burden.",priority:"high",tags:["Metrics","MVP"],source:"Consolidated execution step"},
+
+{phase:"3. Market Validation & GTM",intro:"Validate the business with a small closed group before broad marketing.",
+title:"Create a closed pilot with approximately 50 users",desc:"Recruit a controlled group of elderly users/caregivers and measure actual usage, problems, retention, and willingness to pay.",priority:"high",tags:["Pilot","Validation"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+{phase:"3. Market Validation & GTM",title:"Approach elderly-care associations and care centers for pilot partnerships",desc:"Identify relevant Saudi associations, care centers, and specialists. The consultation specifically suggested organizations such as Waqaar as an example to investigate.",priority:"high",tags:["Partnerships","Pilot"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+{phase:"3. Market Validation & GTM",title:"Develop the caregiver/adult-child marketing message",desc:"Make safety, connection, visibility, convenience, and peace of mind central to the buyer-facing message rather than selling technical features.",priority:"high",tags:["GTM","Marketing"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+{phase:"3. Market Validation & GTM",title:"Develop a phased GTM plan",desc:"Document the first acquisition channel, partnership strategy, onboarding flow, trust-building mechanism, conversion path, and expansion channels.",priority:"high",tags:["GTM","Strategy"],source:"IT — 24 Sep 2026"},
+{phase:"3. Market Validation & GTM",title:"Test partnerships with specialists and associations before mass advertising",desc:"Use trusted organizations and professionals as an initial route to market to build credibility and reach the target customer.",priority:"medium",tags:["GTM","Partnerships"],source:"IT — 24 Sep 2026"},
+{phase:"3. Market Validation & GTM",title:"Define the initial pricing experiment",desc:"Test an early monthly subscription for core services. Measure willingness to pay and unit economics rather than assuming the suggested price model is correct.",priority:"high",tags:["Revenue","Pricing"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+{phase:"3. Market Validation & GTM",title:"Calculate break-even and basic unit economics",desc:"Model acquisition cost, subscription revenue, gross margin, support cost, infrastructure cost, churn, and the number of customers required for break-even.",priority:"high",tags:["Finance","Business Model"],source:"Advisory — 27 Sep 2026, 04:20 PM"},
+
+{phase:"4. Legal, Regulatory & Company Formation",intro:"Resolve formalization and health/privacy issues before scaling. Treat consultant suggestions as leads to verify, not as confirmed legal conclusions.",
+title:"Book a dedicated Saudi legal consultation",desc:"Use Monshaat's recommended Legal consultation to determine company structure, foreign-investor requirements, activities, contracts, IP, privacy, and health-sector implications.",priority:"high",tags:["Legal","Saudi"],source:"Innovation — 10 Aug 2026; Innovation — 24 Sep 2026"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Verify the MISA entrepreneurship/investor licensing route",desc:"Confirm whether the proposed MISA entrepreneurship-related licensing route is currently available to the founders and suitable for the actual business/activity. Do not rely solely on the consultation wording.",priority:"high",tags:["MISA","Legal","Verify"],source:"Advisory — 27 Sep 2026, 04:00 PM"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Confirm the exact Saudi business activities to register",desc:"Identify the correct commercial activities for the product, including technology/software and any health/care-related activities that may trigger additional requirements.",priority:"high",tags:["CR","Legal","Verify"],source:"Advisory — 27 Sep 2026, 04:00 PM"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Evaluate a Saudi LLC structure and founder shareholding",desc:"Assess an LLC structure, ownership percentages, governance, capital requirements, investor entry, and founder agreements with a qualified Saudi professional.",priority:"high",tags:["LLC","Governance","Legal"],source:"Advisory — 27 Sep 2026, 04:00 PM"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Use the Saudi Business Center for the incorporation workflow if appropriate",desc:"Once the legal route is confirmed, use the official Saudi Business Center process for the relevant registration and incorporation steps.",priority:"medium",tags:["Saudi","Company"],source:"Advisory — 27 Sep 2026, 04:00 PM"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Determine health-data and privacy compliance requirements",desc:"Map what personal/health-related data the product collects, where it is stored, who can access it, retention/deletion rules, consent, security, cross-border transfers, and applicable Saudi regulations.",priority:"high",tags:["Privacy","Health","Compliance"],source:"IT — 24 Sep 2026"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Define AI safety and liability boundaries",desc:"Document what the AI may say/do, what it must refuse or escalate, human oversight, emergency handling, medication-reminder limitations, and audit/logging requirements.",priority:"high",tags:["AI","Safety","Legal"],source:"Innovation — 10 Aug 2026"},
+{phase:"4. Legal, Regulatory & Company Formation",title:"Clarify the limitations of the current freelance/work status",desc:"Determine what the existing freelance permit/status allows and what it does not allow for commercial operation, contracts, investment, accelerator participation, hiring, and health-related activities.",priority:"high",tags:["Legal","Saudi","Verify"],source:"Innovation — 10 Aug 2026"},
+
+{phase:"5. IP & Corporate Assets",intro:"Protect the work after the product and ownership structure are sufficiently defined.",
+title:"Create an IP inventory",desc:"List source code, product name/brand, domain, UI/UX assets, prompts/workflows, documentation, databases, algorithms, content, and other protectable assets.",priority:"medium",tags:["IP"],source:"Innovation — 10 Aug 2026"},
+{phase:"5. IP & Corporate Assets",title:"Formalize ownership of product code and other IP",desc:"After confirming the entity/founder structure, ensure code, repositories, domains, designs, and contractor-created work are assigned to the appropriate legal owner.",priority:"high",tags:["IP","Governance"],source:"Innovation — 10 Aug 2026"},
+{phase:"5. IP & Corporate Assets",title:"Assess trademark/brand protection",desc:"Evaluate protection for the final product/company name and related marks in the jurisdictions where the business will operate.",priority:"medium",tags:["IP","Brand"] ,source:"Consolidated execution step"},
+
+{phase:"6. Pitch Deck & Investor Readiness",intro:"Build the missing investment narrative in the sequence identified by Monshaat.",
+title:"Create the structured pitch deck",desc:"Build a professional deck covering: problem, target customer, solution, product/demo, market size, business model, GTM, competition/differentiation, traction, roadmap, team, and funding/use of funds.",priority:"high",tags:["Pitch","Fundraising"],source:"IT — 24 Sep 2026"},
+{phase:"6. Pitch Deck & Investor Readiness",title:"Align the pitch with the initial beachhead segment",desc:"Avoid presenting a huge global market without a credible first customer segment and route to market.",priority:"high",tags:["Pitch","GTM"],source:"Innovation — 10 Aug 2026; IT — 24 Sep 2026"},
+{phase:"6. Pitch Deck & Investor Readiness",title:"Prepare a concise demo narrative",desc:"Create a short product walkthrough showing the caregiver problem, elderly-user experience, WhatsApp/AI interaction, alerts/reports, and measurable value.",priority:"medium",tags:["Pitch","Demo"],source:"IT — 24 Sep 2026"},
+{phase:"6. Pitch Deck & Investor Readiness",title:"Prepare basic fundraising materials",desc:"Create a one-page summary, founder/team profile, traction metrics, financial model, use-of-funds plan, and data room checklist.",priority:"medium",tags:["Fundraising"],source:"Consolidated execution step"},
+
+{phase:"7. Incubators, Accelerators & Support Programs",intro:"Pursue formal incubation/acceleration and social-impact support in parallel with product validation.",
+title:"Book the recommended Monshaat accelerator/incubator consultation",desc:"Use the recommended 'Business Accelerators, Incubators & Coworking Spaces' advisory session to map the most relevant Saudi programs.",priority:"high",tags:["Monshaat","Accelerators"],source:"IT — 24 Sep 2026"},
+{phase:"7. Incubators, Accelerators & Support Programs",title:"Contact the mentor/advisor about Misk Launchpad and obtain the required letter/details",desc:"Follow up with mentor Abeer regarding Misk Launchpad program details and the requested letter.",priority:"high",tags:["Misk","Application"],source:"Innovation — 10 Aug 2026"},
+{phase:"7. Incubators, Accelerators & Support Programs",title:"Investigate Impact Hub for the social-impact dimension",desc:"Assess whether Impact Hub is relevant for the project's social-impact positioning, community, programs, and partnerships.",priority:"medium",tags:["Impact Hub","Social Impact"],source:"Innovation — 10 Aug 2026"},
+{phase:"7. Incubators, Accelerators & Support Programs",title:"Investigate Saudi technology accelerators such as InspireU and Jada 30",desc:"Check current eligibility, application windows, funding terms, sector fit, equity requirements, and founder/company requirements.",priority:"medium",tags:["Accelerators","Verify"],source:"Advisory — 27 Sep 2026, 04:40 PM"},
+{phase:"7. Incubators, Accelerators & Support Programs",title:"Investigate social-impact/nonprofit and healthcare incubators",desc:"Look for programs focused on elderly care, healthcare innovation, social impact, and the Silver Economy.",priority:"medium",tags:["Incubators","Health","Impact"],source:"Advisory — 27 Sep 2026, 04:40 PM"},
+{phase:"7. Incubators, Accelerators & Support Programs",title:"Evaluate angel-investor networks such as Oqal",desc:"Prepare the MVP and pitch materials before approaching angel networks; verify current eligibility and sector interest.",priority:"medium",tags:["Angels","Fundraising","Verify"],source:"Advisory — 27 Sep 2026, 04:40 PM"},
+
+{phase:"8. Competitions & Immediate Opportunities",intro:"The 24 Sep consultation listed opportunities with deadlines around late September/October 2026. Treat these as a research/application queue and verify each deadline immediately.",
+title:"Check E3 Venture eligibility and application status",desc:"The consultation stated E3 Venture was open for applications. Verify the current official application page, eligibility, deadline, and whether the project fits.",priority:"high",tags:["E3 Venture","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check the AI-for-Islamic-Content challenge in Riyadh",desc:"The consultation listed 29 Sep 2026 and a SAR 200,000 prize. Verify official details and whether applications are still open.",priority:"high",tags:["Competition","AI","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check KAPSARC Arabic Language Prize",desc:"The consultation listed 30 Sep 2026 and remote participation. Verify the official program, eligibility, submission requirements, and deadline.",priority:"medium",tags:["Competition","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Future Minerals Pioneers program",desc:"The consultation listed 30 Sep 2026 in Riyadh/remote. Verify eligibility and relevance to the product before spending application effort.",priority:"low",tags:["Competition","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Future Hajj Innovations bootcamp",desc:"The consultation listed 30 Sep 2026 in Jeddah. Verify whether the elderly-care use case fits the current challenge themes.",priority:"medium",tags:["Hajj","Innovation","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Tuwaiq Coding Challenge",desc:"The consultation listed 30 Sep 2026 in Riyadh. Verify current eligibility and whether it is appropriate for the product/team.",priority:"low",tags:["Tuwaiq","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Digital Health Innovation Hackathon — King Saud University",desc:"The consultation listed 1 Oct 2026 in Riyadh with a SAR 1 million prize. Verify official deadline, eligibility, team requirements, and health-regulatory expectations.",priority:"high",tags:["Health","Hackathon","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Garage Challenge",desc:"The consultation listed 1 Oct 2026 in Riyadh. Verify current challenge tracks and eligibility.",priority:"medium",tags:["Challenge","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Tuwaiq Clubs technical project-building program",desc:"The consultation listed 1 Oct 2026 in Riyadh/remote. Verify whether startups can participate and whether it adds meaningful product value.",priority:"low",tags:["Tuwaiq","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Saudi Engineers' Engineering Hackathon",desc:"The consultation listed 5 Oct 2026. Verify whether the team/use case is eligible and whether participation is worthwhile.",priority:"low",tags:["Hackathon","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Future Gamers program",desc:"The consultation listed 10 Oct 2026. Verify relevance to the product before prioritizing it.",priority:"low",tags:["Program","Verify"],source:"Innovation — 24 Sep 2026"},
+{phase:"8. Competitions & Immediate Opportunities",title:"Check Noura Al-Malahi Award",desc:"The consultation listed 15 Oct 2026 and a SAR 400,000 prize. Verify eligibility, social-impact criteria, and application requirements.",priority:"medium",tags:["Award","Impact","Verify"],source:"Innovation — 24 Sep 2026"},
+
+{phase:"9. Operating Cadence & Follow-up",intro:"Keep the advisory process active and turn recommendations into measurable progress.",
+title:"Book the Operations & Execution consultation",desc:"Use the recommended Monshaat session to review execution bottlenecks, KPIs, operating cadence, and resource allocation.",priority:"medium",tags:["Monshaat","Operations"],source:"Innovation — 24 Sep 2026"},
+{phase:"9. Operating Cadence & Follow-up",title:"Book the IT consultation follow-up",desc:"Use the recommended IT advisory session to review architecture, UX, automation, MVP implementation, and technical roadmap.",priority:"medium",tags:["Monshaat","IT"],source:"IT — 24 Sep 2026"},
+{phase:"9. Operating Cadence & Follow-up",title:"Book another Innovation consultation when the MVP/pilot evidence is available",desc:"Return with actual user feedback, metrics, and product evidence so the next session can focus on decisions rather than assumptions.",priority:"low",tags:["Monshaat","Innovation"],source:"Innovation — 10 Aug 2026; Innovation — 24 Sep 2026"},
+{phase:"9. Operating Cadence & Follow-up",title:"Maintain a monthly recommendation review",desc:"Review this tracker monthly, close completed actions, delete stale opportunities, and add evidence/decisions from new consultations.",priority:"medium",tags:["Execution","Review"],source:"Consolidated execution step"}
+];
+
+let state = JSON.parse(localStorage.getItem("monshaatTracker") || "{}");
+let notes = JSON.parse(localStorage.getItem("monshaatTrackerNotes") || "{}");
+let evidence = JSON.parse(localStorage.getItem("monshaatTrackerEvidence") || "{}");
+
+const consultantMap = {
+  "Innovation — 10 Aug 2026": "Huda Ahmed Muhammed Flatah",
+  "Innovation — 24 Sep 2026": "Huda Ahmed Muhammed Flatah",
+  "IT — 24 Sep 2026": "Abdulhamid Abu Bakr",
+  "Advisory — 27 Sep 2026, 04:00 PM": "Abeer Mahmoud Al-Tamimi",
+  "Advisory — 27 Sep 2026, 04:20 PM": "Abeer Mahmoud Al-Tamimi",
+  "Advisory — 27 Sep 2026, 04:40 PM": "Abeer Mahmoud Al-Tamimi"
+};
+
+function getConsultants(source){
+  const found=[];
+  Object.entries(consultantMap).forEach(([key,name])=>{ if(source.includes(key)) found.push(name); });
+  return [...new Set(found)].join(" / ") || "Consolidated / execution item";
+}
+function persistNotes(){localStorage.setItem("monshaatTrackerNotes",JSON.stringify(notes));}
+function persistEvidence(){localStorage.setItem("monshaatTrackerEvidence",JSON.stringify(evidence));}
+
+function saveNote(i, value){
+  notes[i]=value; persistNotes();
+}
+function addEvidence(i, fileInput){
+  const files=[...fileInput.files];
+  if(!files.length)return;
+  if(!evidence[i]) evidence[i]=[];
+  files.forEach(file=>{
+    evidence[i].push({
+      name:file.name, type:file.type || "unknown",
+      size:file.size, added:new Date().toLocaleString()
+    });
+  });
+  persistEvidence();
+  render();
+}
+function removeEvidence(i,j){
+  evidence[i].splice(j,1);
+  persistEvidence(); render();
+}
+function downloadEvidenceTemplate(i){
+  const t=tasks[i];
+  const txt=`Evidence record for: ${t.title}\n\nConsultant: ${getConsultants(t.source)}\nSource: ${t.source}\n\nNotes:\n${notes[i]||""}\n\nEvidence files:\n${(evidence[i]||[]).map(x=>x.name).join("\n")}`;
+  const blob=new Blob([txt],{type:"text/plain"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="evidence-record.txt"; a.click(); URL.revokeObjectURL(a.href);
+}
+
+
+function save(){localStorage.setItem("monshaatTracker",JSON.stringify(state));}
+function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
+
+function render(){
+  const q=document.getElementById("search").value.toLowerCase().trim();
+  const f=document.getElementById("filter").value;
+  const phases=[...new Set(tasks.map(t=>t.phase))];
+  let out="", visible=0;
+  phases.forEach(phase=>{
+    const list=tasks.map((t,i)=>({...t,i})).filter(t=>t.phase===phase).filter(t=>{
+      const hay=(t.title+" "+t.desc+" "+t.tags.join(" ")+" "+t.source).toLowerCase();
+      const done=!!state[t.i];
+      const matchQ=!q||hay.includes(q);
+      const matchF=f==="all"||(f==="open"&&!done)||(f==="done"&&done)||(f==="high"&&t.priority==="high")||(f==="verify"&&t.tags.includes("Verify"));
+      return matchQ&&matchF;
+    });
+    if(!list.length)return;
+    visible+=list.length;
+    out+=`<section class="phase"><h2>${esc(phase)}</h2>`;
+    const intro=tasks.find(t=>t.phase===phase)?.intro;
+    if(intro) out+=`<p>${esc(intro)}</p>`;
+    list.forEach(t=>{
+      const done=!!state[t.i];
+      const cls=t.priority==="high"?"p-high":t.priority==="medium"?"p-med":"p-low";
+      const cons=getConsultants(t.source);
+      const ev=evidence[t.i]||[];
+      out+=`<div class="task ${done?"done":""}" data-i="${t.i}">
+        <input class="check" type="checkbox" ${done?"checked":""} onchange="toggle(${t.i},this.checked)">
+        <div>
+          <div class="title">${esc(t.title)}</div>
+          <div class="desc">${esc(t.desc)}</div>
+          <div class="meta"><span class="tag ${cls}">${t.priority.toUpperCase()}</span>${t.tags.map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div>
+          <details><summary>Consultant / source</summary>
+            <div class="source"><strong>Consultant:</strong> ${esc(cons)}<br><strong>Session:</strong> ${esc(t.source)}</div>
+          </details>
+          <details>
+            <summary>My notes & follow-up (${notes[t.i] ? "saved" : "empty"})</summary>
+            <textarea class="notes" placeholder="What did I do? What is pending? Why could I not complete it? What should I ask Monshaat/consultant next?" oninput="saveNote(${t.i},this.value)">${esc(notes[t.i]||"")}</textarea>
+            <div class="note-actions"><button onclick="downloadEvidenceTemplate(${t.i})">Export follow-up record</button></div>
+          </details>
+          <details>
+            <summary>Evidence / proof (${ev.length} file${ev.length===1?"":"s"})</summary>
+            <div class="evidence-box">
+              <label class="upload">＋ Add evidence
+                <input type="file" multiple onchange="addEvidence(${t.i},this)">
+              </label>
+              <div class="evidence-list">
+                ${ev.length ? ev.map((x,j)=>`<div class="evidence-item"><span>📎 ${esc(x.name)} <small>(${Math.ceil(x.size/1024)} KB, ${esc(x.added)})</small></span><button onclick="removeEvidence(${t.i},${j})">Remove</button></div>`).join("") : '<span class="muted">No evidence attached yet.</span>'}
+              </div>
+              <div class="muted">Files are recorded locally by this browser. The page does not upload them to a server.</div>
+            </div>
+          </details>
+        </div>
+        <div class="owner">${done?"Completed":"Open"}</div>
+      </div>`;
+    });
+    out+="</section>";
+  });
+  document.getElementById("tasks").innerHTML=out||"<p>No matching tasks.</p>";
+  const done=Object.values(state).filter(Boolean).length, total=tasks.length;
+  document.getElementById("done").textContent=done;
+  document.getElementById("total").textContent=total;
+  document.getElementById("open").textContent=total-done;
+  const pct=Math.round(done/total*100);
+  document.getElementById("pct").textContent=pct+"%";
+  document.getElementById("bar").style.width=pct+"%";
+}
+function toggle(i,v){state[i]=v;save();render();}
+function markVisible(v){document.querySelectorAll(".task").forEach(el=>{state[el.dataset.i]=v});save();render();}
+function resetAll(){if(confirm("Reset every task to Open?")){state={};save();render();}}
+document.getElementById("search").addEventListener("input",render);
+document.getElementById("filter").addEventListener("change",render);
+render();
+</script>
+</body>
+</html>
