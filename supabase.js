@@ -1,11 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 
-const env = process["env"];
-const url = env["NEXT_PUBLIC_SUPABASE_URL"];
-const key = env["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"];
+const url =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://yzuntxzebttnjmscagve.supabase.co";
 
-if (!url || !key) throw new Error("Missing Supabase environment variables");
+const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-export const supabase = createClient(url, key, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
+export const supabase = createClient(
+  url,
+  key || "build-placeholder-key",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  }
+);
