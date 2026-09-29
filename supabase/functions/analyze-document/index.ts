@@ -104,7 +104,20 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get("authorization") || "";
-    const userId = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    let userId = "";
+
+    try {
+      const payload = token.split(".")[1];
+      if (payload) {
+        const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+        const decoded = JSON.parse(atob(normalized.padEnd(normalized.length + (4 - normalized.length % 4) % 4, "=")));
+        userId = String(decoded.sub || "");
+      }
+    } catch {
+      userId = "";
+    }
+
     if (!userId) {
       return response({ error: "Authenticated user session required." }, 401, origin);
     }
