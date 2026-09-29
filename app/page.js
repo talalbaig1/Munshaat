@@ -111,6 +111,17 @@ function TaskCard({
         </div>
         <h2>{task.title}</h2>
         <p>{task.description}</p>
+        {task.original_arabic ? (
+          <div className="originalArabic">
+            <div className="originalArabicLabel">Original Arabic source</div>
+            <div dir="rtl" lang="ar">{task.original_arabic}</div>
+          </div>
+        ) : (
+          <div className="originalArabic unavailable">
+            <div className="originalArabicLabel">Original Arabic source</div>
+            <div>Not available in the original tracker data.</div>
+          </div>
+        )}
         <div className="meta">
           <span>
             Consultant: <b>{consultantFor(task.source, consultants)}</b>
@@ -394,6 +405,12 @@ function EmailIntake({
             <article className="proposal" key={i}>
               <div className="taskTop"><span className={"priority " + rec.priority}>{rec.priority}</span><b>{rec.title}</b></div>
               <p>{rec.description}</p>
+              {rec.original_arabic && (
+                <div className="originalArabic proposalArabic">
+                  <div className="originalArabicLabel">Original Arabic source</div>
+                  <div dir="rtl" lang="ar">{rec.original_arabic}</div>
+                </div>
+              )}
               <small>Source: {rec.source_excerpt || "—"}</small>
               <ul>{(rec.tasks || []).map((t, j) => <li key={j}><b>{t.title}</b>{t.due_date ? " · due " + t.due_date : " · no deadline stated"}</li>)}</ul>
             </article>
@@ -945,6 +962,7 @@ export default function Page() {
           session_id: sessionInsert.data.id,
           title: rec.title,
           description: rec.description || null,
+          original_arabic: rec.original_arabic || null,
           source: rec.source_excerpt || emailFile?.name || "Uploaded consultant email",
           received_date: emailAnalysis.received_date || emailReceivedDate || null,
           source_email_id: emailRecordId
@@ -957,6 +975,7 @@ export default function Page() {
             task_key: "email-" + emailRecordId + "-" + Math.random().toString(36).slice(2, 10),
             title: t.title,
             description: t.description || null,
+            original_arabic: t.original_arabic || rec.original_arabic || null,
             priority: t.priority || rec.priority || "medium",
             due_date: t.due_date || rec.due_date || null,
             status: "open",
