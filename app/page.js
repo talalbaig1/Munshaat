@@ -317,7 +317,13 @@ export default function Page() {
     const result =
       mode === "signin"
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+        : await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: window.location.origin
+            }
+          });
 
     if (result.error) {
       setAuthMsg(result.error.message);
