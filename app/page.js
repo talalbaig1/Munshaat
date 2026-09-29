@@ -350,10 +350,10 @@ function TaskCard({
                 </label>
               ) : (
                 <div className="evidenceUrlForm">
-                  <input
-                    type="url"
+                  <textarea
                     value={evidenceUrl}
-                    placeholder="https://example.com/evidence"
+                    placeholder={"Paste one or more URLs, one per line"}
+                    rows={3}
                     onChange={(e) => setEvidenceUrl(e.target.value)}
                   />
                   <button
@@ -985,39 +985,39 @@ export default function Page() {
   }
 
   async function addUrlEvidence(task, value) {
-    const raw = value.trim();
-    if (!raw) return false;
+    const urls = value.split(/\\r?\\n/).map((item) => item.trim()).filter(Boolean);
+    if (!urls.length) return false;
 
-    let parsed;
-    try {
-      parsed = new URL(raw);
-    } catch {
-      setError("Enter a valid web URL beginning with http:// or https://.");
-      return false;
-    }
-
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      setError("Only http:// and https:// web URLs can be saved as evidence.");
-      return false;
+    const parsedUrls = [];
+    for (const raw of urls) {
+      let parsed;
+      try {
+        parsed = new URL(raw);
+      } catch {
+        setError("Every evidence URL must be valid and begin with http:// or https://.");
+        return false;
+      }
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        setError("Only http:// and https:// web URLs can be saved as evidence.");
+        return false;
+      }
+      parsedUrls.push(parsed);
     }
 
     setBusy(true);
-    const result = await supabase
-      .from("monshaat_evidence")
-      .insert({
-        task_id: task.id,
-        storage_path: null,
-        file_name: parsed.hostname || parsed.href,
-        mime_type: "text/uri-list",
-        file_size: null,
-        uploaded_by: session.user.id,
-        verification_status: "pending",
-        evidence_type: "url",
-        source_url: parsed.href
-      })
-      .select()
-      .single();
+    const rows = parsedUrls.map((parsed) => ({
+      task_id: task.id,
+      storage_path: null,
+      file_name: parsed.hostname || parsed.href,
+      mime_type: "text/uri-list",
+      file_size: null,
+      uploaded_by: session.user.id,
+      verification_status: "pending",
+      evidence_type: "url",
+      source_url: parsed.href
+    }));
 
+    const result = await supabase.from("monshaat_evidence").insert(rows).select();
     if (result.error) {
       setError(result.error.message);
       setBusy(false);
@@ -1026,7 +1026,7 @@ export default function Page() {
 
     setEvidence((current) => ({
       ...current,
-      [task.id]: [result.data, ...(current[task.id] || [])]
+      [task.id]: [...(result.data || []).reverse(), ...(current[task.id] || [])]
     }));
     setBusy(false);
     return true;
@@ -1351,6 +1351,13 @@ export default function Page() {
               <span className="sidebarIcon">✉</span>
               <span><b>Email Intake</b><small>Consultant recommendations</small></span>
             </button>
+            <button
+              className={"sidebarItem " + (activeTab === "reports" ? "active" : "")}
+              onClick={() => { setActiveTab("reports"); if (!sidebarPinned) setSidebarOpen(false); }}
+            >
+              <span className="sidebarIcon">▤</span>
+              <span><b>Reports</b><small>Consultant PDF report</small></span>
+            </button>
           </div>
           <div className="sidebarFooter">
             <button className="pinButton" onClick={() => setSidebarPinned((value) => !value)}>
@@ -1368,7 +1375,17 @@ export default function Page() {
       )}
 
       <div className="workspaceMain">
-      {activeTab === "email" ? (
+      {activeTab === "reports" ? (
+        <ReportsPanel
+          tasks={tasks}
+          consultants={consultants}
+          evidence={evidence}
+          notes={notes}
+          questions={questions}
+          recommendations={recommendations}
+          onPrint={() => window.print()}
+        />
+      ) : activeTab === "email" ? (
         <EmailIntake
           emailFile={emailFile}
           setEmailFile={setEmailFile}
