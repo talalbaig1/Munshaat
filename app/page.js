@@ -445,6 +445,8 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarPinned, setSidebarPinned] = useState(true);
   const [recommendations, setRecommendations] = useState([]);
   const [sortBy, setSortBy] = useState("received_desc");
   const [emailFile, setEmailFile] = useState(null);
@@ -1138,11 +1140,47 @@ export default function Page() {
         require official verification before reliance.
       </div>
 
-      <nav className="tabs">
-        <button className={activeTab === "dashboard" ? "active" : ""} onClick={() => setActiveTab("dashboard")}>Action Tracker</button>
-        <button className={activeTab === "email" ? "active" : ""} onClick={() => setActiveTab("email")}>Email Intake</button>
-      </nav>
+      {sidebarOpen && (
+        <aside className={"appSidebar " + (sidebarPinned ? "pinned" : "floating")}>
+          <div className="sidebarHeader">
+            <div>
+              <div className="sidebarTitle">Workspace</div>
+              <div className="sidebarSubtitle">Munshaat tools</div>
+            </div>
+            <button className="iconButton" onClick={() => setSidebarOpen(false)} title="Close sidebar" aria-label="Close sidebar">×</button>
+          </div>
+          <div className="sidebarNav">
+            <button
+              className={"sidebarItem " + (activeTab === "dashboard" ? "active" : "")}
+              onClick={() => { setActiveTab("dashboard"); if (!sidebarPinned) setSidebarOpen(false); }}
+            >
+              <span className="sidebarIcon">✓</span>
+              <span><b>Action Tracker</b><small>Tasks, progress, evidence</small></span>
+            </button>
+            <button
+              className={"sidebarItem " + (activeTab === "email" ? "active" : "")}
+              onClick={() => { setActiveTab("email"); if (!sidebarPinned) setSidebarOpen(false); }}
+            >
+              <span className="sidebarIcon">✉</span>
+              <span><b>Email Intake</b><small>Consultant recommendations</small></span>
+            </button>
+          </div>
+          <div className="sidebarFooter">
+            <button className="pinButton" onClick={() => setSidebarPinned((value) => !value)}>
+              {sidebarPinned ? "Unpin sidebar" : "Fix sidebar"}
+            </button>
+            <span className="fine">{sidebarPinned ? "Pinned view" : "Overlay view"}</span>
+          </div>
+        </aside>
+      )}
 
+      {!sidebarOpen && (
+        <button className="sidebarLauncher" onClick={() => setSidebarOpen(true)} title="Open sidebar" aria-label="Open sidebar">
+          ☰
+        </button>
+      )}
+
+      <div className="workspaceMain">
       {activeTab === "email" ? (
         <EmailIntake
           emailFile={emailFile}
@@ -1261,6 +1299,7 @@ export default function Page() {
       <footer>
         Munshaat · {stats.open} open · {stats.done} completed · live Supabase state
       </footer>
+      </div>
     </main>
   );
 }
