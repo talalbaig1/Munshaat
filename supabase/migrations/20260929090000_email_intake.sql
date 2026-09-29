@@ -24,4 +24,4 @@ create index if not exists idx_monshaat_recommendations_received_date on public.
 create index if not exists idx_monshaat_tasks_due_date on public.monshaat_tasks(due_date);
 insert into storage.buckets (id,name,public) values ('monshaat-email-source','monshaat-email-source',false) on conflict (id) do nothing;
 drop policy if exists "authenticated manage email source" on storage.objects;
-create policy "authenticated manage email source" on storage.objects for all to authenticated using (bucket_id='monshaat-email-source') with check (bucket_id='monshaat-email-source' and (storage.foldername(name))[1]=(select auth.uid()::text));
+create policy "authenticated manage email source" on storage.objects for all to authenticated using (bucket_id='monshaat-email-source' and (storage.foldername(name))[1]=(select auth.uid()::text)) with check (bucket_id='monshaat-email-source' and (storage.foldername(name))[1]=(select auth.uid()::text));
