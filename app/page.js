@@ -12,7 +12,10 @@ const STATUS_LABELS = {
   needs_verification: "Needs Verification"
 };
 const PRIORITIES = ["critical", "high", "medium", "low"];
-const INACTIVITY_MS = 10 * 60 * 1000;\nconst LOGIN_MAX_FAILURES = 5;\nconst LOGIN_LOCKOUT_MS = 60 * 1000;\nconst LAST_ACTIVITY_KEY = "munshaat:last-activity";
+const INACTIVITY_MS = 10 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCKOUT_MS = 60 * 1000;
+const LAST_ACTIVITY_KEY = "munshaat:last-activity";
 const HINTS = {
   Innovation: "Huda Ahmed Muhammed Flatah",
   IT: "Abdulhamid Abu Bakr",
@@ -929,6 +932,7 @@ export default function Page() {
       const consultantName = emailAnalysis.consultant_name;
       const matched = consultants.find((c) => consultantName && c.name.toLowerCase() === consultantName.toLowerCase()) || consultants.find((c) => consultantName && c.name.toLowerCase().includes(consultantName.toLowerCase()));
       const sessionInsert = await supabase.from("monshaat_sessions").insert({
+        owner_id: session.user.id,
         consultant_id: matched?.id || null,
         session_date: emailAnalysis.received_date || emailReceivedDate || null,
         title: "Consultant email: " + (emailFile?.name || "uploaded email"),
@@ -948,6 +952,7 @@ export default function Page() {
         if (recInsert.error) throw recInsert.error;
         for (const t of rec.tasks || []) {
           const taskInsert = await supabase.from("monshaat_tasks").insert({
+            owner_id: session.user.id,
             recommendation_id: recInsert.data.id,
             task_key: "email-" + emailRecordId + "-" + Math.random().toString(36).slice(2, 10),
             title: t.title,
