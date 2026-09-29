@@ -32,6 +32,16 @@ function consultantFor(source, consultants) {
   return "Consolidated / execution item";
 }
 
+function consultantForTask(task, consultants, recommendations, sessions) {
+  const direct = consultantFor(task.source, consultants);
+  if (direct !== "Consolidated / execution item") return direct;
+
+  const recommendation = recommendations.find((r) => r.id === task.recommendation_id);
+  const session = recommendation && sessions.find((item) => item.id === recommendation.session_id);
+  const consultant = session && consultants.find((c) => c.id === session.consultant_id);
+  return consultant?.name || direct;
+}
+
 function bytes(n) {
   return n ? Math.max(1, Math.round(n / 1024)) + " KB" : "0 KB";
 }
@@ -52,9 +62,12 @@ function groupAll(rows, key) {
   }, {});
 }
 
-function ReportsPanel({ tasks, consultants, evidence, notes, questions, recommendations, onPrint }) {
+function ReportsPanel({ tasks, consultants, sessions, evidence, notes, questions, recommendations, onPrint }) {
   const [reportConsultant, setReportConsultant] = useState("all");
-  const selectedTasks = useMemo(() => tasks.filter((task) => reportConsultant === "all" || consultantFor(task.source, consultants) === reportConsultant), [tasks, reportConsultant, consultants]);
+  const selectedTasks = useMemo(
+    () => tasks.filter((task) => reportConsultant === "all" || consultantForTask(task, consultants, recommendations, sessions) === reportConsultant),
+    [tasks, reportConsultant, consultants, recommendations, sessions]
+  );
   const counts = useMemo(() => {
     const count = (status) => selectedTasks.filter((task) => task.status === status).length;
     const ev = selectedTasks.flatMap((task) => evidence[task.id] || []);
@@ -120,7 +133,7 @@ function ReportsPanel({ tasks, consultants, evidence, notes, questions, recommen
             return <div className="reportTask" key={task.id}>
               <div className="reportTaskTitle"><span>{index + 1}</span><div><h3>{task.title}</h3><div className="reportBadges"><b>{STATUS_LABELS[task.status]}</b><b>{task.progress || 0}%</b><b>{task.priority}</b></div></div></div>
               {task.description && <p>{task.description}</p>}
-              <div className="reportFacts"><span><b>Phase:</b> {task.phase || "—"}</span><span><b>Consultant:</b> {consultantFor(task.source, consultants)}</span><span><b>Due:</b> {task.due_date || "Not set"}</span><span><b>Source:</b> {task.source || "—"}</span></div>
+              <div className="reportFacts"><span><b>Phase:</b> {task.phase || "—"}</span><span><b>Consultant:</b> {consultantForTask(task, consultants, recommendations, sessions)}</span><span><b>Due:</b> {task.due_date || "Not set"}</span><span><b>Source:</b> {task.source || "—"}</span></div>
               {task.original_arabic && <div className="reportArabic"><b>Original Arabic source</b><div dir="rtl" lang="ar">{task.original_arabic}</div></div>}
               {notes[task.id]?.note && <div className="reportBlock"><b>Latest progress note</b><p>{notes[task.id].note}</p></div>}
               {task.blocker_reason && <div className="reportBlock blocker"><b>Blocker / reason not completed</b><p>{task.blocker_reason}</p></div>}
@@ -138,20 +151,20 @@ function ReportsPanel({ tasks, consultants, evidence, notes, questions, recommen
 
 function StatCards({ stats }) {
   const cards = [
-    ["Total Tasks", stats.total, ""],
-    ["Completed", stats.done, "green"],
-    ["Progress", stats.progress + "%", "blue"],
-    ["In Progress", stats.ip, ""],
-    ["Blocked", stats.blocked, "red"],
-    ["Follow-up", stats.follow, "amber"],
-    ["Evidence", stats.evidence, ""],
-    ["Verification Pending", stats.pending, "purple"]
+    ["📋", "Total Tasks", stats.total, ""],
+    ["✅", "Completed", stats.done, "green"],
+    ["📈", "Progress", stats.progress + "%", "blue"],
+    ["🔄", "In Progress", stats.ip, ""],
+    ["⛔", "Blocked", stats.blocked, "red"],
+    ["💬", "Follow-up", stats.follow, "amber"],
+    ["📎", "Evidence", stats.evidence, ""],
+    ["🔎", "Verification Pending", stats.pending, "purple"]
   ];
   return (
     <section className="stats">
-      {cards.map(([label, value, cls]) => (
+      {cards.map(([icon, label, value, cls]) => (
         <div className="stat" key={label}>
-          <span>{label}</span>
+          <div className="statLabel"><span className="statIcon" aria-hidden="true">{icon}</span><span>{label}</span></div>
           <strong className={cls}>{value}</strong>
         </div>
       ))}
@@ -543,6 +556,7 @@ export default function Page() {
   const [loginBlockedUntil, setLoginBlockedUntil] = useState(0);
   const [tasks, setTasks] = useState([]);
   const [consultants, setConsultants] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [notes, setNotes] = useState({});
   const [questions, setQuestions] = useState({});
   const [evidence, setEvidence] = useState({});
@@ -694,6 +708,7 @@ export default function Page() {
     const results = await Promise.all([
       supabase.from("monshaat_tasks").select("*").order("phase").order("title"),
       supabase.from("monshaat_recommendations").select("*").order("received_date", { ascending: false }),
+      supabase.from("monshaat_sessions").select("id, consultant_id, session_date, title"),
       supabase.from("monshaat_consultants").select("*").order("name"),
       supabase.from("monshaat_task_notes").select("*").order("created_at", { ascending: false }),
       supabase.from("monshaat_follow_up_questions").select("*").order("created_at", { ascending: false }),
@@ -706,10 +721,11 @@ export default function Page() {
     } else {
       setTasks(results[0].data || []);
       setRecommendations(results[1].data || []);
-      setConsultants(results[2].data || []);
-      setNotes(groupLatest(results[3].data || [], "task_id"));
-      setQuestions(groupAll(results[4].data || [], "task_id"));
-      setEvidence(groupAll(results[5].data || [], "task_id"));
+      setSessions(results[2].data || []);
+      setConsultants(results[3].data || []);
+      setNotes(groupLatest(results[4].data || [], "task_id"));
+      setQuestions(groupAll(results[5].data || [], "task_id"));
+      setEvidence(groupAll(results[6].data || [], "task_id"));
     }
     setBusy(false);
   }
@@ -1169,7 +1185,7 @@ export default function Page() {
             due_date: t.due_date || rec.due_date || null,
             status: "open",
             progress: 0,
-            source: "Consultant email: " + (emailFile?.name || "uploaded email")
+            source: "Consultant: " + (consultantName || "Unidentified") + " · email: " + (emailFile?.name || "uploaded email")
           });
           if (taskInsert.error) throw taskInsert.error;
         }
@@ -1201,10 +1217,10 @@ export default function Page() {
         (status === "all" || task.status === status) &&
         (priority === "all" || task.priority === priority) &&
         (consultant === "all" ||
-          consultantFor(task.source, consultants) === consultant)
+          consultantForTask(task, consultants, recommendations, sessions) === consultant)
       );
     });
-  }, [tasks, query, phase, status, priority, consultant, consultants]);
+  }, [tasks, query, phase, status, priority, consultant, consultants, recommendations, sessions]);
 
   const sortedFiltered = useMemo(() => {
     const priorityRank = { critical: 1, high: 2, medium: 3, low: 4 };
@@ -1312,8 +1328,8 @@ export default function Page() {
     <main className={"shell " + (sidebarPinned && sidebarOpen ? "sidebarPinned" : "")}>
       <header className="hero">
         <div>
-          <div className="eyebrow">ELDERWISE / SILACARES</div>
-          <h1>Monshaat Action Tracker</h1>
+          <div className="heroIdentity"><span className="heroLogo" aria-hidden="true">🌿</span><div><div className="eyebrow">ELDERWISE / SILACARES</div>
+          <h1>Monshaat Action Tracker</h1></div></div>
           <p>Recommendations → execution → evidence → follow-up</p>
         </div>
         <div className="heroActions">
@@ -1379,6 +1395,7 @@ export default function Page() {
         <ReportsPanel
           tasks={tasks}
           consultants={consultants}
+          sessions={sessions}
           evidence={evidence}
           notes={notes}
           questions={questions}
