@@ -86,7 +86,9 @@ function TaskCard({
   uploadEvidence,
   openEvidence,
   deleteEvidence,
-  reviewEvidence
+  reviewEvidence,
+  analyzeEvidence,
+  evidenceAnalysis
 }) {
   const isOpen = expanded === task.id;
   const ev = evidence[task.id] || [];
@@ -241,6 +243,9 @@ function TaskCard({
                       <button className="tiny" onClick={() => openEvidence(item)}>
                         Open
                       </button>
+                      <button className="tiny" onClick={() => analyzeEvidence(item, task)}>
+                        Analyze AI
+                      </button>
                       <select
                         value={item.verification_status}
                         onChange={(e) => reviewEvidence(item, e.target.value)}
@@ -260,15 +265,78 @@ function TaskCard({
                   </div>
                 ))}
               </div>
+              {ev.map((item) => evidenceAnalysis[item.id] && (
+                <div className="aiResult" key={"analysis-" + item.id}>
+                  <b>AI assessment: {evidenceAnalysis[item.id].result}</b>
+                  <span>Confidence: {Math.round((evidenceAnalysis[item.id].confidence || 0) * 100)}%</span>
+                  <p>{evidenceAnalysis[item.id].rationale}</p>
+                  {evidenceAnalysis[item.id].missing_items?.length > 0 && (
+                    <small>Missing: {evidenceAnalysis[item.id].missing_items.join("; ")}</small>
+                  )}
+                </div>
+              ))}
               <p className="fine">
-                Files remain in private Supabase Storage. Evidence review never
-                auto-completes a task.
+                Files remain in private Supabase Storage. AI review is advisory and never auto-completes a task.
               </p>
             </section>
           </div>
         </div>
       )}
     </article>
+  );
+}
+
+function EmailIntake({
+  emailFile,
+  setEmailFile,
+  emailReceivedDate,
+  setEmailReceivedDate,
+  emailBusy,
+  emailAnalysis,
+  emailStatus,
+  onAnalyze,
+  onApprove
+}) {
+  return (
+    <section className="emailPanel">
+      <div className="panelHead">
+        <div>
+          <div className="eyebrow">CONSULTANT EMAIL INTAKE</div>
+          <h2>Upload a consultant email</h2>
+          <p>Arabic emails can be analyzed and converted into proposed recommendations and executable tasks.</p>
+        </div>
+      </div>
+      <div className="emailForm">
+        <label className="upload">Choose email/document
+          <input type="file" accept=".eml,.txt,.html,.htm,.pdf,image/*" onChange={(e) => setEmailFile(e.target.files?.[0] || null)} />
+        </label>
+        <label>Recommendation received date <span className="fine">(optional)</span>
+          <input type="date" value={emailReceivedDate} onChange={(e) => setEmailReceivedDate(e.target.value)} />
+        </label>
+        <button className="primary" disabled={!emailFile || emailBusy} onClick={onAnalyze}>{emailBusy ? "Analyzing..." : "Analyze email"}</button>
+      </div>
+      {emailFile && <div className="notice">Selected: <b>{emailFile.name}</b> · {Math.round(emailFile.size / 1024)} KB</div>}
+      {emailStatus && <div className="notice">{emailStatus}</div>}
+      {emailAnalysis && (
+        <div className="emailAnalysis">
+          <div className="analysisTop">
+            <div><b>Consultant:</b> {emailAnalysis.consultant_name || "Not identified"}</div>
+            <div><b>Received:</b> {emailAnalysis.received_date || emailReceivedDate || "Not identified"}</div>
+          </div>
+          <p>{emailAnalysis.summary}</p>
+          {(emailAnalysis.recommendations || []).map((rec, i) => (
+            <article className="proposal" key={i}>
+              <div className="taskTop"><span className={"priority " + rec.priority}>{rec.priority}</span><b>{rec.title}</b></div>
+              <p>{rec.description}</p>
+              <small>Source: {rec.source_excerpt || "—"}</small>
+              <ul>{(rec.tasks || []).map((t, j) => <li key={j}><b>{t.title}</b>{t.due_date ? " · due " + t.due_date : " · no deadline stated"}</li>)}</ul>
+            </article>
+          ))}
+          <button className="primary" onClick={onApprove}>Add approved recommendations & tasks to tracker</button>
+          <p className="fine">Review the AI proposal before adding it. The source email is not treated as a legal or regulatory authority.</p>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -291,6 +359,16 @@ export default function Page() {
   const [expanded, setExpanded] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [recommendations, setRecommendations] = useState([]);
+  const [sortBy, setSortBy] = useState("received_desc");
+  const [emailFile, setEmailFile] = useState(null);
+  const [emailReceivedDate, setEmailReceivedDate] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailAnalysis, setEmailAnalysis] = useState(null);
+  const [emailStatus, setEmailStatus] = useState("");
+  const [emailRecordId, setEmailRecordId] = useState(null);
+  const [evidenceAnalysis, setEvidenceAnalysis] = useState({});
 
   useEffect(() => {
     let mounted = true;
@@ -338,6 +416,7 @@ export default function Page() {
     setError("");
     const results = await Promise.all([
       supabase.from("monshaat_tasks").select("*").order("phase").order("title"),
+      supabase.from("monshaat_recommendations").select("*").order("received_date", { ascending: false }),
       supabase.from("monshaat_consultants").select("*").order("name"),
       supabase.from("monshaat_task_notes").select("*").order("created_at", { ascending: false }),
       supabase.from("monshaat_follow_up_questions").select("*").order("created_at", { ascending: false }),
@@ -349,10 +428,11 @@ export default function Page() {
       setError(bad.message);
     } else {
       setTasks(results[0].data || []);
-      setConsultants(results[1].data || []);
-      setNotes(groupLatest(results[2].data || [], "task_id"));
-      setQuestions(groupAll(results[3].data || [], "task_id"));
-      setEvidence(groupAll(results[4].data || [], "task_id"));
+      setRecommendations(results[1].data || []);
+      setConsultants(results[2].data || []);
+      setNotes(groupLatest(results[3].data || [], "task_id"));
+      setQuestions(groupAll(results[4].data || [], "task_id"));
+      setEvidence(groupAll(results[5].data || [], "task_id"));
     }
     setBusy(false);
   }
@@ -563,6 +643,131 @@ export default function Page() {
     }
   }
 
+  async function analyzeEvidence(item, task) {
+    setBusy(true);
+    setError("");
+    try {
+      const download = await supabase.storage.from("monshaat-evidence").download(item.storage_path);
+      if (download.error) throw download.error;
+      const file = download.data;
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const { data, error: fnError } = await supabase.functions.invoke("analyze-document", {
+        body: { mode: "evidence", filename: item.file_name, mime_type: item.mime_type, file_base64: base64, task }
+      });
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+      const result = data.result;
+      setEvidenceAnalysis((current) => ({ ...current, [item.id]: result }));
+      await supabase.from("monshaat_evidence_reviews").insert({
+        evidence_id: item.id,
+        reviewer: session.user.email,
+        review_type: "ai_assessment",
+        result: result.result,
+        confidence: result.confidence,
+        rationale: result.rationale
+      });
+    } catch (e) {
+      setError(e.message || "Evidence analysis failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function readFilePayload(file) {
+    const binaryTypes = ["application/pdf"];
+    if (binaryTypes.includes(file.type) || file.type.startsWith("image/")) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      return { file_base64: dataUrl.split(",")[1], content: null };
+    }
+    return { file_base64: null, content: await file.text() };
+  }
+
+  async function analyzeEmail() {
+    if (!emailFile) return;
+    setEmailBusy(true); setEmailStatus(""); setEmailAnalysis(null); setError("");
+    try {
+      const payload = await readFilePayload(emailFile);
+      const inserted = await supabase.from("monshaat_emails").insert({
+        uploaded_by: session.user.id,
+        file_name: emailFile.name,
+        mime_type: emailFile.type || "text/plain",
+        received_at: emailReceivedDate ? new Date(emailReceivedDate + "T00:00:00").toISOString() : null,
+        raw_text: payload.content || "[binary document stored for analysis]",
+        language: "ar",
+        status: "uploaded"
+      }).select().single();
+      if (inserted.error) throw inserted.error;
+      setEmailRecordId(inserted.data.id);
+      const { data, error: fnError } = await supabase.functions.invoke("analyze-document", {
+        body: { mode: "email", filename: emailFile.name, mime_type: emailFile.type || "text/plain", ...payload }
+      });
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+      setEmailAnalysis(data.result);
+      await supabase.from("monshaat_emails").update({ status: "analyzed", analysis: data.result, updated_at: new Date().toISOString() }).eq("id", inserted.data.id);
+      setEmailStatus("Analysis complete. Review the proposed actions before adding them to the tracker.");
+    } catch (e) {
+      setEmailStatus(""); setError(e.message || "Email analysis failed.");
+    } finally { setEmailBusy(false); }
+  }
+
+  async function approveEmailAnalysis() {
+    if (!emailAnalysis || !emailRecordId) return;
+    setEmailBusy(true); setError("");
+    try {
+      const consultantName = emailAnalysis.consultant_name;
+      const matched = consultants.find((c) => consultantName && c.name.toLowerCase() === consultantName.toLowerCase()) || consultants.find((c) => consultantName && c.name.toLowerCase().includes(consultantName.toLowerCase()));
+      const sessionInsert = await supabase.from("monshaat_sessions").insert({
+        consultant_id: matched?.id || null,
+        session_date: emailAnalysis.received_date || emailReceivedDate || null,
+        title: "Consultant email: " + (emailFile?.name || "uploaded email"),
+        summary: emailAnalysis.summary || null,
+        source: "Uploaded consultant email"
+      }).select().single();
+      if (sessionInsert.error) throw sessionInsert.error;
+      for (const rec of emailAnalysis.recommendations || []) {
+        const recInsert = await supabase.from("monshaat_recommendations").insert({
+          session_id: sessionInsert.data.id,
+          title: rec.title,
+          description: rec.description || null,
+          source: rec.source_excerpt || emailFile?.name || "Uploaded consultant email",
+          received_date: emailAnalysis.received_date || emailReceivedDate || null,
+          source_email_id: emailRecordId
+        }).select().single();
+        if (recInsert.error) throw recInsert.error;
+        for (const t of rec.tasks || []) {
+          const taskInsert = await supabase.from("monshaat_tasks").insert({
+            recommendation_id: recInsert.data.id,
+            task_key: "email-" + emailRecordId + "-" + Math.random().toString(36).slice(2, 10),
+            title: t.title,
+            description: t.description || null,
+            priority: t.priority || rec.priority || "medium",
+            due_date: t.due_date || rec.due_date || null,
+            status: "open",
+            progress: 0,
+            source: "Consultant email: " + (emailFile?.name || "uploaded email")
+          });
+          if (taskInsert.error) throw taskInsert.error;
+        }
+      }
+      await supabase.from("monshaat_emails").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", emailRecordId);
+      setEmailStatus("Approved recommendations and tasks have been added to the tracker.");
+      await loadData();
+      setEmailAnalysis(null); setEmailFile(null); setEmailRecordId(null);
+    } catch (e) { setError(e.message || "Could not add the email actions."); }
+    finally { setEmailBusy(false); }
+  }
+
   const filtered = useMemo(() => {
     return tasks.filter((task) => {
       const haystack = [
@@ -586,6 +791,25 @@ export default function Page() {
       );
     });
   }, [tasks, query, phase, status, priority, consultant, consultants]);
+
+  const sortedFiltered = useMemo(() => {
+    const priorityRank = { critical: 1, high: 2, medium: 3, low: 4 };
+    const recMap = Object.fromEntries(recommendations.map((r) => [r.id, r]));
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "priority") return (priorityRank[a.priority] || 9) - (priorityRank[b.priority] || 9);
+      if (sortBy === "priority_desc") return (priorityRank[b.priority] || 9) - (priorityRank[a.priority] || 9);
+      if (sortBy === "due_asc" || sortBy === "due_desc") {
+        const av = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY;
+        const bv = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY;
+        return sortBy === "due_asc" ? av - bv : bv - av;
+      }
+      const ad = recMap[a.recommendation_id]?.received_date || null;
+      const bd = recMap[b.recommendation_id]?.received_date || null;
+      const av = ad ? new Date(ad).getTime() : 0;
+      const bv = bd ? new Date(bd).getTime() : 0;
+      return sortBy === "received_asc" ? av - bv : bv - av;
+    });
+  }, [filtered, recommendations, sortBy]);
 
   const stats = useMemo(() => {
     const count = (value) => tasks.filter((task) => task.status === value).length;
@@ -689,6 +913,24 @@ export default function Page() {
         require official verification before reliance.
       </div>
 
+      <nav className="tabs">
+        <button className={activeTab === "dashboard" ? "active" : ""} onClick={() => setActiveTab("dashboard")}>Action Tracker</button>
+        <button className={activeTab === "email" ? "active" : ""} onClick={() => setActiveTab("email")}>Email Intake</button>
+      </nav>
+
+      {activeTab === "email" ? (
+        <EmailIntake
+          emailFile={emailFile}
+          setEmailFile={setEmailFile}
+          emailReceivedDate={emailReceivedDate}
+          setEmailReceivedDate={setEmailReceivedDate}
+          emailBusy={emailBusy}
+          emailAnalysis={emailAnalysis}
+          emailStatus={emailStatus}
+          onAnalyze={analyzeEmail}
+          onApprove={approveEmailAnalysis}
+        />
+      ) : <>
       <StatCards stats={stats} />
 
       <section className="toolbar">
@@ -721,6 +963,14 @@ export default function Page() {
             <option key={c.id} value={c.name}>{c.name}</option>
           ))}
         </select>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="received_desc">Newest recommendation first</option>
+          <option value="received_asc">Oldest recommendation first</option>
+          <option value="due_asc">Soonest due date first</option>
+          <option value="due_desc">Latest due date first</option>
+          <option value="priority">Highest priority first</option>
+          <option value="priority_desc">Lowest priority first</option>
+        </select>
         <button onClick={loadData}>{busy ? "Refreshing..." : "Refresh"}</button>
       </section>
 
@@ -749,7 +999,7 @@ export default function Page() {
       </section>
 
       <section className="taskList">
-        {filtered.map((task) => (
+        {sortedFiltered.map((task) => (
           <TaskCard
             key={task.id}
             task={task}
@@ -767,12 +1017,15 @@ export default function Page() {
             openEvidence={openEvidence}
             deleteEvidence={deleteEvidence}
             reviewEvidence={reviewEvidence}
+            analyzeEvidence={analyzeEvidence}
+            evidenceAnalysis={evidenceAnalysis}
           />
         ))}
-        {!filtered.length && (
+        {!sortedFiltered.length && (
           <div className="empty">No tasks match the current filters.</div>
         )}
       </section>
+      </>}
 
       <footer>
         Munshaat · {stats.open} open · {stats.done} completed · live Supabase state
