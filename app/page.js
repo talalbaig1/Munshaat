@@ -345,7 +345,7 @@ function TaskCard({
               </div>
               {evidenceMode === "file" ? (
                 <label className="upload">
-                  Upload picture or file
+                  Upload pictures / files
                   <input type="file" multiple onChange={(e) => uploadEvidence(task, Array.from(e.target.files || []))} />
                 </label>
               ) : (
@@ -364,7 +364,7 @@ function TaskCard({
                       if (saved) setEvidenceUrl("");
                     }}
                   >
-                    Add URL
+                    Add URL(s)
                   </button>
                 </div>
               )}
