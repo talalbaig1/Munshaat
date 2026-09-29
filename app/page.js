@@ -1122,7 +1122,7 @@ export default function Page() {
   }
 
   return (
-    <main className="shell">
+    <main className={"shell " + (sidebarPinned && sidebarOpen ? "sidebarPinned" : "")}>
       <header className="hero">
         <div>
           <div className="eyebrow">ELDERWISE / SILACARES</div>
