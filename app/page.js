@@ -334,6 +334,7 @@ function EmailIntake({
           <div className="eyebrow">CONSULTANT EMAIL INTAKE</div>
           <h2>Upload or paste a consultant email</h2>
           <p>Arabic emails can be analyzed and converted into proposed recommendations and executable tasks.</p>
+          <div className="intakeHint"><b>Monshaat format recognized:</b> consultant/session heading, challenges, recommendations, follow-up needs, supporting files, and standard footer text. Boilerplate is ignored; recommendation source text is preserved.</div>
         </div>
       </div>
 
@@ -412,7 +413,12 @@ function EmailIntake({
                 </div>
               )}
               <small>Source: {rec.source_excerpt || "—"}</small>
-              <ul>{(rec.tasks || []).map((t, j) => <li key={j}><b>{t.title}</b>{t.due_date ? " · due " + t.due_date : " · no deadline stated"}</li>)}</ul>
+              <ul>{(rec.tasks || []).map((t, j) => (
+                <li key={j}>
+                  <b>{t.title}</b>{t.due_date ? " · due " + t.due_date : " · no deadline stated"}
+                  {t.original_arabic && <div className="proposalTaskArabic" dir="rtl" lang="ar">{t.original_arabic}</div>}
+                </li>
+              ))}</ul>
             </article>
           ))}
           <button className="primary" onClick={onApprove} disabled={emailBusy}>Add approved recommendations & tasks to tracker</button>
