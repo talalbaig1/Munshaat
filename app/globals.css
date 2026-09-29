@@ -32,3 +32,143 @@
 @media print{
   @page{size:A4;margin:12mm}.appSidebar,.sidebarLauncher,.hero,.notice.dark,.toolbar,.stats,.phaseSummary,footer,.reportToolbar{display:none!important}.shell,.workspaceMain{margin:0!important;max-width:none!important;padding:0!important}.reportWorkspace{margin:0}.reportPaper{border:0;box-shadow:none;padding:0;border-radius:0}.reportHeader{padding-top:0}.reportTask{break-inside:avoid}.reportSection{break-inside:auto}body{background:#fff;font-size:10px}.reportPaper a{color:#101828;text-decoration:underline}
 }
+
+
+/* Responsive visual system */
+html,body{width:100%;overflow-x:hidden}
+body{background:radial-gradient(circle at 12% 0%,#eef4ff 0,#f5f7fb 28%,#f5f7fb 100%)}
+.shell{width:100%;max-width:1680px;margin:0 auto;padding:20px clamp(12px,2.2vw,34px) 48px}
+.shell.sidebarPinned{width:calc(100% - 248px);max-width:none;margin-left:248px;margin-right:0}
+.workspaceMain{width:100%;max-width:100%}
+.hero{position:relative;overflow:hidden;min-height:116px;border-radius:20px;padding:22px clamp(18px,3vw,34px);box-shadow:0 12px 30px rgba(16,24,40,.12)}
+.hero:after{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-80px;top:-120px;background:rgba(46,107,255,.18)}
+.heroIdentity{display:flex;align-items:center;gap:13px;position:relative;z-index:1}
+.heroLogo{width:52px;height:52px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#2e6bff,#12b76a);box-shadow:0 8px 18px rgba(0,0,0,.2);font-size:25px}
+.hero h1{letter-spacing:-.5px}
+.heroActions{position:relative;z-index:2}
+.heroActions span{font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.stats{grid-template-columns:repeat(8,minmax(0,1fr));gap:11px}
+.stat{min-width:0;padding:12px 13px;transition:transform .15s ease,box-shadow .15s ease}
+.stat:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(16,24,40,.07)}
+.statLabel{display:flex;align-items:center;gap:7px;min-width:0}
+.statLabel>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.statIcon{font-size:15px;line-height:1}
+.stat strong{font-size:24px}
+
+.toolbar{gap:8px;padding:11px 0}
+.toolbar input{min-width:220px}
+.toolbar select{min-width:145px}
+
+.taskList{gap:12px}
+.taskCard{box-shadow:0 2px 7px rgba(16,24,40,.035);transition:box-shadow .15s ease,transform .15s ease}
+.taskCard:hover{box-shadow:0 8px 22px rgba(16,24,40,.07)}
+.taskCard.done{border-left:4px solid var(--green)}
+.taskCard:not(.done){border-left:4px solid #d0d5dd}
+.taskCard:has(.status.blocked){border-left-color:var(--red)}
+.taskCard:has(.status.in_progress){border-left-color:var(--blue)}
+.taskCard:has(.status.needs_verification){border-left-color:var(--purple)}
+.taskMain{padding:17px 18px 12px}
+.taskMain h2{font-size:18px;letter-spacing:-.15px}
+.taskControls{align-items:center}
+.detail{padding:16px 18px}
+.detail section{box-shadow:0 1px 4px rgba(16,24,40,.03)}
+.evidenceModes{background:#f2f4f7;border-radius:9px;padding:3px;width:max-content}
+.evidenceModes button{border:0;background:transparent}
+.evidenceModes button.active{box-shadow:0 1px 4px rgba(16,24,40,.08);background:#fff}
+.item.evidence{background:#fff}
+
+.appSidebar{width:248px;background:linear-gradient(180deg,#0b1220 0%,#101828 45%,#111c31 100%)}
+.sidebarHeader{padding-bottom:18px}
+.sidebarTitle{font-size:16px}
+.sidebarNav{gap:8px}
+.sidebarItem{padding:12px 10px}
+.sidebarItem.active{box-shadow:0 6px 16px rgba(21,94,239,.22)}
+.sidebarIcon{font-size:15px}
+.sidebarFooter .fine{padding:0 2px}
+.sidebarLauncher{font-size:17px}
+
+.reportWorkspace{width:100%;max-width:1280px;margin:18px auto 0}
+.reportToolbar{border-top:4px solid var(--blue);box-shadow:0 5px 18px rgba(16,24,40,.06)}
+.reportToolbar h2{font-size:21px;letter-spacing:-.2px}
+.reportActions select{min-width:280px}
+.reportPaper{box-shadow:0 12px 34px rgba(16,24,40,.07);max-width:100%;overflow:hidden}
+.reportHeader{background:linear-gradient(135deg,#f8fbff,#fff);margin:-38px -42px 0;padding:38px 42px 22px}
+.reportKpis div{position:relative;overflow:hidden}
+.reportKpis div:nth-child(2){border-top:3px solid var(--green)}
+.reportKpis div:nth-child(3){border-top:3px solid var(--blue)}
+.reportKpis div:nth-child(4){border-top:3px solid var(--red)}
+.reportKpis div:nth-child(5){border-top:3px solid var(--purple)}
+.reportSection>h2{display:flex;align-items:center;gap:8px}
+.reportSection>h2:before{content:"";width:5px;height:18px;border-radius:4px;background:var(--blue);display:inline-block}
+.reportStatusGrid div{background:#fff}
+.reportStatusGrid div:nth-child(1){border-left:3px solid var(--green)}
+.reportStatusGrid div:nth-child(2){border-left:3px solid var(--blue)}
+.reportStatusGrid div:nth-child(3){border-left:3px solid var(--red)}
+.reportStatusGrid div:nth-child(4){border-left:3px solid #98a2b3}
+.reportStatusGrid div:nth-child(5){border-left:3px solid var(--purple)}
+.reportTask{position:relative}
+.reportTaskTitle>span{background:linear-gradient(145deg,#101828,#344054)}
+.reportBadges b:first-child{background:#eef4ff;color:#175cd3}
+.reportBlock.blocker b{color:#b42318}
+.reportFooter{line-height:1.5}
+
+@media(max-width:1250px){
+  .stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:900px){
+  .shell.sidebarPinned{width:100%;max-width:none;margin-left:0}
+  .hero{padding:20px}
+  .heroActions{margin-top:12px}
+  .toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .toolbar input{grid-column:1/-1;min-width:0;width:100%}
+  .toolbar select,.toolbar button{width:100%;min-width:0}
+  .reportWorkspace{margin-top:14px}
+  .reportHeader{margin:-25px -20px 0;padding:25px 20px 20px}
+}
+@media(max-width:600px){
+  .shell{padding:10px 10px 34px}
+  .hero{border-radius:15px;padding:16px}
+  .heroLogo{width:44px;height:44px;border-radius:13px;font-size:21px}
+  .hero h1{font-size:23px}
+  .hero p{font-size:12px}
+  .heroActions{display:flex;justify-content:space-between;gap:8px}
+  .heroActions span{max-width:calc(100vw - 120px)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .stat{padding:10px}
+  .stat strong{font-size:21px}
+  .toolbar{grid-template-columns:1fr}
+  .toolbar input{grid-column:auto}
+  .taskMain{padding:14px}
+  .taskControls{padding:9px 14px}
+  .taskControls select,.taskControls input,.taskControls button{width:100%;max-width:none;flex:1 1 100%}
+  .detail{padding:12px}
+  .detailGrid{gap:9px}
+  .questionAdd{flex-direction:column}
+  .questionAdd input,.questionAdd button{width:100%}
+  .item.evidence>div{width:100%}
+  .item.evidence>div .tiny,.item.evidence>div select{flex:1}
+  .reportPaper{padding:20px 15px;border-radius:12px}
+  .reportHeader{margin:-20px -15px 0;padding:20px 15px}
+  .reportHeader h1{font-size:22px}
+  .reportKpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .reportKpis div{padding:9px}
+  .reportKpis b{font-size:19px}
+  .reportStatusGrid{grid-template-columns:1fr}
+  .reportTaskTitle h3{font-size:14px}
+  .reportFacts{display:grid;grid-template-columns:1fr;gap:4px}
+  .reportToolbar{padding:14px}
+  .reportActions select{min-width:0}
+}
+@media(max-width:380px){
+  .stats{grid-template-columns:1fr 1fr}
+  .statLabel{font-size:10px}
+  .statIcon{font-size:13px}
+  .hero h1{font-size:20px}
+}
+
+@media print{
+  .shell{width:100%!important;max-width:none!important;margin:0!important}
+  .reportHeader{margin:0!important}
+  .reportPaper{overflow:visible}
+}
