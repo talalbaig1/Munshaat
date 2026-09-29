@@ -697,12 +697,17 @@ export default function Page() {
     setEmailBusy(true); setEmailStatus(""); setEmailAnalysis(null); setError("");
     try {
       const payload = await readFilePayload(emailFile);
+      const safeName = emailFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = session.user.id + "/" + crypto.randomUUID() + "-" + safeName;
+      const upload = await supabase.storage.from("monshaat-email-source").upload(storagePath, emailFile, { upsert: false, contentType: emailFile.type || "application/octet-stream" });
+      if (upload.error) throw upload.error;
       const inserted = await supabase.from("monshaat_emails").insert({
         uploaded_by: session.user.id,
         file_name: emailFile.name,
         mime_type: emailFile.type || "text/plain",
+        storage_path: storagePath,
         received_at: emailReceivedDate ? new Date(emailReceivedDate + "T00:00:00").toISOString() : null,
-        raw_text: payload.content || "[binary document stored for analysis]",
+        raw_text: payload.content || "[binary document stored privately in Supabase Storage]",
         language: "ar",
         status: "uploaded"
       }).select().single();
