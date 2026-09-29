@@ -14,8 +14,16 @@ const ALLOWED_ORIGINS = new Set([
 
 const rateState = new Map<string, { started: number; count: number }>();
 
+function isAllowedOrigin(origin: string | null) {
+  return Boolean(
+    origin &&
+    (ALLOWED_ORIGINS.has(origin) ||
+      /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin))
+  );
+}
+
 function corsHeaders(origin: string | null) {
-  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : "https://munshaat.vercel.app";
+  const allowed = isAllowedOrigin(origin) ? origin : "https://munshaat.vercel.app";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -98,7 +106,7 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders(origin) });
   }
 
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !isAllowedOrigin(origin)) {
     return response({ error: "Origin not allowed." }, 403, origin);
   }
 
