@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "openai/gpt-5.4-mini";
+const MODEL = "openrouter/free";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const MAX_TEXT_CHARS = 200_000;
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
