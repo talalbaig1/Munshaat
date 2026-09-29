@@ -88,11 +88,13 @@ function TaskCard({
   deleteEvidence,
   reviewEvidence,
   analyzeEvidence,
-  evidenceAnalysis
+  evidenceAnalysis,
+  recommendations
 }) {
   const isOpen = expanded === task.id;
   const ev = evidence[task.id] || [];
   const qs = questions[task.id] || [];
+  const recommendation = recommendations.find((r) => r.id === task.recommendation_id);
 
   return (
     <article className={"taskCard " + (task.status === "completed" ? "done" : "")}>
@@ -110,6 +112,8 @@ function TaskCard({
             Consultant: <b>{consultantFor(task.source, consultants)}</b>
           </span>
           <span>Source: {task.source || "—"}</span>
+          {recommendation?.received_date && <span>Received: {recommendation.received_date}</span>}
+          <span>Due: {task.due_date || "Not set"}</span>
         </div>
         <div className="progressLine">
           <i style={{ width: (task.progress || 0) + "%" }} />
@@ -135,6 +139,12 @@ function TaskCard({
               progress: Math.max(0, Math.min(100, Number(e.target.value)))
             })
           }
+        />
+        <input
+          type="date"
+          value={task.due_date || ""}
+          title="Optional due date / urgency timeline"
+          onChange={(e) => updateTask(task.id, { due_date: e.target.value || null })}
         />
         <button onClick={() => setExpanded(isOpen ? null : task.id)}>
           {isOpen ? "Close" : "Open task"}
@@ -1024,6 +1034,7 @@ export default function Page() {
             reviewEvidence={reviewEvidence}
             analyzeEvidence={analyzeEvidence}
             evidenceAnalysis={evidenceAnalysis}
+            recommendations={recommendations}
           />
         ))}
         {!sortedFiltered.length && (
