@@ -83,6 +83,15 @@ export default function Page(){
     if(a.error)setError(a.error.message);else{const r=await supabase.from("monshaat_evidence").delete().eq("id",item.id);if(r.error)setError(r.error.message);else setEvidence(v=>({...v,[id]:(v[id]||[]).filter(x=>x.id!==item.id)}));}
     setBusy(false);
   }
+  async function updateQuestionStatus(questionId,taskId,statusValue){
+    const r=await supabase.from("monshaat_follow_up_questions").update({
+      status:statusValue,
+      answered_at:statusValue==="answered"?new Date().toISOString():null
+    }).eq("id",questionId);
+    if(r.error)setError(r.error.message);
+    else setQuestions(v=>({...v,[taskId]:v[taskId].map(x=>x.id===questionId?{...x,status:statusValue}:x)}));
+  }
+
   async function reviewEvidence(item,statusValue){
     const r=await supabase.from("monshaat_evidence").update({verification_status:statusValue}).eq("id",item.id).select().single();
     if(r.error)setError(r.error.message);else setEvidence(v=>Object.fromEntries(Object.entries(v).map(([k,l])=>[k,l.map(x=>x.id===item.id?r.data:x)])));
@@ -110,7 +119,7 @@ export default function Page(){
       {open&&<div className="detail"><div className="detailGrid">
         <section><h3>Progress note</h3><textarea defaultValue={note} placeholder="What was done, what remains, and what changed?" id={"note-"+task.id}/><button className="small" onClick={()=>saveNote(task.id,document.getElementById("note-"+task.id).value)}>Save note</button></section>
         <section><h3>Blocker / reason not completed</h3><textarea defaultValue={task.blocker_reason||""} placeholder="Why is this blocked or still open?" id={"block-"+task.id}/><button className="small" onClick={()=>updateTask(task.id,{blocker_reason:document.getElementById("block-"+task.id).value||null})}>Save blocker</button></section>
-        <section><h3>Follow-up question</h3><div className="questionAdd"><input placeholder="Question for Monshaat..." id={"q-"+task.id}/><button className="small" onClick={()=>{const el=document.getElementById("q-"+task.id);addQuestion(task.id,el.value);el.value=""}}>Add</button></div><div className="items">{qs.map(q=><div className="item" key={q.id}><span>{q.question}</span><select value={q.status} onChange={async e=>{const s=e.target.value,r=await supabase.from("monshaat_follow_up_questions").update({status:s,answered_at:s==="answered"?new Date().toISOString():null}).eq("id",q.id);if(r.error)setError(r.error.message);else setQuestions(v=>({...v,[task.id]:v[task.id].map(x=>x.id===q.id?{...x,status:s}:x)}));}}><option value="open">Open</option><option value="answered">Answered</option><option value="dismissed">Dismissed</option></select></div>)}</div></section>
+        <section><h3>Follow-up question</h3><div className="questionAdd"><input placeholder="Question for Monshaat..." id={"q-"+task.id}/><button className="small" onClick={()=>{const el=document.getElementById("q-"+task.id);addQuestion(task.id,el.value);el.value=""}}>Add</button></div><div className="items">{qs.map(q=><div className="item" key={q.id}><span>{q.question}</span><select value={q.status} onChange={e=>updateQuestionStatus(q.id,task.id,e.target.value)}><option value="open">Open</option><option value="answered">Answered</option><option value="dismissed">Dismissed</option></select></div>)}</div></section>
         <section><h3>Evidence</h3><label className="upload">Upload evidence<input type="file" onChange={e=>uploadEvidence(task,e.target.files?.[0])}/></label><div className="items">{ev.map(item=><div className="item evidence" key={item.id}><span>📎 {item.file_name}<small>{bytes(item.file_size)} · {item.verification_status}</small></span><div><button className="tiny" onClick={()=>openEvidence(item)}>Open</button><select value={item.verification_status} onChange={e=>reviewEvidence(item,e.target.value)}><option value="pending">Pending</option><option value="needs_review">Needs Review</option><option value="verified">Verified</option><option value="rejected">Rejected</option></select><button className="tiny danger" onClick={()=>deleteEvidence(item,task.id)}>Delete</button></div></div>)}</div><p className="fine">Files remain in private Supabase Storage. Evidence review never auto-completes a task.</p></section>
       </div></div>}
     </article>)}{!filtered.length&&<div className="empty">No tasks match the current filters.</div>}</section>
