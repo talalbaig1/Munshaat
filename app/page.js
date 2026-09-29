@@ -11,7 +11,8 @@ const STATUS_LABELS = {
   completed: "Completed",
   needs_verification: "Needs Verification"
 };
-const PRIORITIES = ["critical", "high", "medium", "low"];\nconst INACTIVITY_MS = 10 * 60 * 1000;\nconst LOGIN_MAX_FAILURES = 5;\nconst LOGIN_LOCKOUT_MS = 60 * 1000;\nconst LAST_ACTIVITY_KEY = "munshaat:last-activity";
+const PRIORITIES = ["critical", "high", "medium", "low"];
+const INACTIVITY_MS = 10 * 60 * 1000;\nconst LOGIN_MAX_FAILURES = 5;\nconst LOGIN_LOCKOUT_MS = 60 * 1000;\nconst LAST_ACTIVITY_KEY = "munshaat:last-activity";
 const HINTS = {
   Innovation: "Huda Ahmed Muhammed Flatah",
   IT: "Abdulhamid Abu Bakr",
@@ -408,6 +409,8 @@ export default function Page() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMsg, setAuthMsg] = useState("");
+  const [loginFailures, setLoginFailures] = useState(0);
+  const [loginBlockedUntil, setLoginBlockedUntil] = useState(0);
   const [tasks, setTasks] = useState([]);
   const [consultants, setConsultants] = useState([]);
   const [notes, setNotes] = useState({});
@@ -425,6 +428,8 @@ export default function Page() {
   const [recommendations, setRecommendations] = useState([]);
   const [sortBy, setSortBy] = useState("received_desc");
   const [emailFile, setEmailFile] = useState(null);
+  const [emailInputMode, setEmailInputMode] = useState("file");
+  const [emailText, setEmailText] = useState("");
   const [emailReceivedDate, setEmailReceivedDate] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailAnalysis, setEmailAnalysis] = useState(null);
