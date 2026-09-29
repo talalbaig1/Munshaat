@@ -52,6 +52,90 @@ function groupAll(rows, key) {
   }, {});
 }
 
+function ReportsPanel({ tasks, consultants, evidence, notes, questions, recommendations, onPrint }) {
+  const [reportConsultant, setReportConsultant] = useState("all");
+  const selectedTasks = useMemo(() => tasks.filter((task) => reportConsultant === "all" || consultantFor(task.source, consultants) === reportConsultant), [tasks, reportConsultant, consultants]);
+  const counts = useMemo(() => {
+    const count = (status) => selectedTasks.filter((task) => task.status === status).length;
+    const ev = selectedTasks.flatMap((task) => evidence[task.id] || []);
+    return { total: selectedTasks.length, completed: count("completed"), inProgress: count("in_progress"), blocked: count("blocked"), open: count("open"), verify: count("needs_verification"), evidence: ev.length, files: ev.filter((x) => x.evidence_type === "file").length, images: ev.filter((x) => x.evidence_type === "image").length, urls: ev.filter((x) => x.evidence_type === "url").length };
+  }, [selectedTasks, evidence]);
+  const avgProgress = selectedTasks.length ? Math.round(selectedTasks.reduce((sum, task) => sum + (task.progress || 0), 0) / selectedTasks.length) : 0;
+
+  return (
+    <section className="reportWorkspace">
+      <div className="reportToolbar">
+        <div>
+          <div className="eyebrow">CONSULTANT REPORT</div>
+          <h2>Monshaat Progress & Evidence Report</h2>
+          <p>Professional execution summary generated from the current tracker data.</p>
+        </div>
+        <div className="reportActions">
+          <label>Consultant
+            <select value={reportConsultant} onChange={(e) => setReportConsultant(e.target.value)}>
+              <option value="all">All consultants / consolidated</option>
+              {consultants.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </label>
+          <button className="primary" onClick={onPrint}>Export / Print PDF</button>
+        </div>
+      </div>
+
+      <article className="reportPaper" id="consultant-report">
+        <header className="reportHeader">
+          <div>
+            <div className="eyebrow">ELDERWISE / SILACARES</div>
+            <h1>Monshaat Action & Progress Report</h1>
+            <p>Consultant execution update</p>
+          </div>
+          <div className="reportMeta"><b>Prepared for</b><br />{reportConsultant === "all" ? "Consultant team / consolidated" : reportConsultant}<br /><br /><b>Report date</b><br />{new Date().toLocaleDateString()}</div>
+        </header>
+
+        <section className="reportKpis">
+          <div><span>Total tasks</span><b>{counts.total}</b></div>
+          <div><span>Completed</span><b>{counts.completed}</b></div>
+          <div><span>Average progress</span><b>{avgProgress}%</b></div>
+          <div><span>Blocked</span><b>{counts.blocked}</b></div>
+          <div><span>Evidence items</span><b>{counts.evidence}</b></div>
+        </section>
+
+        <section className="reportSection">
+          <h2>Executive Summary</h2>
+          <p>Across the selected scope, {counts.completed} of {counts.total} tasks are marked completed, with an average recorded progress of {avgProgress}%. {counts.inProgress} tasks are in progress, {counts.blocked} are blocked, {counts.open} remain open, and {counts.verify} require verification.</p>
+          <div className="reportEvidenceSummary"><b>Evidence submitted:</b> {counts.files} files · {counts.images} pictures · {counts.urls} web URLs · {counts.evidence} total items</div>
+        </section>
+
+        <section className="reportSection">
+          <h2>Task Status Overview</h2>
+          <div className="reportStatusGrid">
+            {[["Completed", counts.completed], ["In Progress", counts.inProgress], ["Blocked", counts.blocked], ["Open", counts.open], ["Needs Verification", counts.verify]].map(([label, value]) => <div key={label}><b>{label}</b><span>{value}</span></div>)}
+          </div>
+        </section>
+
+        <section className="reportSection">
+          <h2>Detailed Execution Record</h2>
+          {selectedTasks.map((task, index) => {
+            const ev = evidence[task.id] || [];
+            const qs = questions[task.id] || [];
+            return <div className="reportTask" key={task.id}>
+              <div className="reportTaskTitle"><span>{index + 1}</span><div><h3>{task.title}</h3><div className="reportBadges"><b>{STATUS_LABELS[task.status]}</b><b>{task.progress || 0}%</b><b>{task.priority}</b></div></div></div>
+              {task.description && <p>{task.description}</p>}
+              <div className="reportFacts"><span><b>Phase:</b> {task.phase || "—"}</span><span><b>Consultant:</b> {consultantFor(task.source, consultants)}</span><span><b>Due:</b> {task.due_date || "Not set"}</span><span><b>Source:</b> {task.source || "—"}</span></div>
+              {task.original_arabic && <div className="reportArabic"><b>Original Arabic source</b><div dir="rtl" lang="ar">{task.original_arabic}</div></div>}
+              {notes[task.id]?.note && <div className="reportBlock"><b>Latest progress note</b><p>{notes[task.id].note}</p></div>}
+              {task.blocker_reason && <div className="reportBlock blocker"><b>Blocker / reason not completed</b><p>{task.blocker_reason}</p></div>}
+              {qs.length > 0 && <div className="reportBlock"><b>Follow-up questions</b><ul>{qs.map((q) => <li key={q.id}>{q.question} <small>({q.status})</small></li>)}</ul></div>}
+              <div className="reportBlock"><b>Evidence submitted ({ev.length})</b>{ev.length ? <ul>{ev.map((item) => <li key={item.id}>{item.evidence_type === "url" ? <a href={item.source_url}>{item.source_url}</a> : item.file_name} — {item.evidence_type}, {item.verification_status}</li>)}</ul> : <p>No evidence submitted for this task.</p>}</div>
+            </div>;
+          })}
+        </section>
+
+        <footer className="reportFooter">Generated from the Monshaat Action Tracker. This report reflects tracker records at the time of generation. Consultant recommendations and regulatory/opportunity information remain subject to official verification.</footer>
+      </article>
+    </section>
+  );
+}
+
 function StatCards({ stats }) {
   const cards = [
     ["Total Tasks", stats.total, ""],
@@ -262,7 +346,7 @@ function TaskCard({
               {evidenceMode === "file" ? (
                 <label className="upload">
                   Upload picture or file
-                  <input type="file" onChange={(e) => uploadEvidence(task, e.target.files?.[0])} />
+                  <input type="file" multiple onChange={(e) => uploadEvidence(task, Array.from(e.target.files || []))} />
                 </label>
               ) : (
                 <div className="evidenceUrlForm">
@@ -722,60 +806,70 @@ export default function Page() {
     }
   }
 
-  async function uploadEvidence(task, file) {
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
-      setError("Evidence files must be 15 MB or smaller.");
+  async function uploadEvidence(task, files) {
+    const selected = Array.isArray(files) ? files : files ? [files] : [];
+    if (!selected.length) return;
+
+    const oversized = selected.find((file) => file.size > 15 * 1024 * 1024);
+    if (oversized) {
+      setError("Each evidence file must be 15 MB or smaller.");
       return;
     }
+
     setBusy(true);
+    setError("");
+    const created = [];
 
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path =
-      session.user.id +
-      "/" +
-      task.id +
-      "/" +
-      crypto.randomUUID() +
-      "-" +
-      safe;
+    try {
+      for (const file of selected) {
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path =
+          session.user.id +
+          "/" +
+          task.id +
+          "/" +
+          crypto.randomUUID() +
+          "-" +
+          safe;
 
-    const upload = await supabase.storage
-      .from("monshaat-evidence")
-      .upload(path, file, { upsert: false });
+        const upload = await supabase.storage
+          .from("monshaat-evidence")
+          .upload(path, file, { upsert: false });
 
-    if (upload.error) {
-      setError(upload.error.message);
-      setBusy(false);
-      return;
-    }
+        if (upload.error) throw upload.error;
 
-    const result = await supabase
-      .from("monshaat_evidence")
-      .insert({
-        task_id: task.id,
-        storage_path: path,
-        file_name: file.name,
-        mime_type: file.type || "application/octet-stream",
-        file_size: file.size,
-        uploaded_by: session.user.id,
-        verification_status: "pending",
-        evidence_type: file.type.startsWith("image/") ? "image" : "file",
-        source_url: null
-      })
-      .select()
-      .single();
+        const result = await supabase
+          .from("monshaat_evidence")
+          .insert({
+            task_id: task.id,
+            storage_path: path,
+            file_name: file.name,
+            mime_type: file.type || "application/octet-stream",
+            file_size: file.size,
+            uploaded_by: session.user.id,
+            verification_status: "pending",
+            evidence_type: file.type.startsWith("image/") ? "image" : "file",
+            source_url: null
+          })
+          .select()
+          .single();
 
-    if (result.error) {
-      await supabase.storage.from("monshaat-evidence").remove([path]);
-      setError(result.error.message);
-    } else {
+        if (result.error) {
+          await supabase.storage.from("monshaat-evidence").remove([path]);
+          throw result.error;
+        }
+        created.push(result.data);
+      }
+
       setEvidence((current) => ({
         ...current,
-        [task.id]: [result.data, ...(current[task.id] || [])]
+        [task.id]: [...created.reverse(), ...(current[task.id] || [])]
       }));
+    } catch (e) {
+      setError(e.message || "One or more evidence files could not be uploaded.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function openEvidence(item) {
