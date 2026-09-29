@@ -11,7 +11,7 @@ const STATUS_LABELS = {
   completed: "Completed",
   needs_verification: "Needs Verification"
 };
-const PRIORITIES = ["critical", "high", "medium", "low"];
+const PRIORITIES = ["critical", "high", "medium", "low"];\nconst INACTIVITY_MS = 10 * 60 * 1000;\nconst LOGIN_MAX_FAILURES = 5;\nconst LOGIN_LOCKOUT_MS = 60 * 1000;\nconst LAST_ACTIVITY_KEY = "munshaat:last-activity";
 const HINTS = {
   Innovation: "Huda Ahmed Muhammed Flatah",
   IT: "Abdulhamid Abu Bakr",
@@ -299,11 +299,16 @@ function TaskCard({
 function EmailIntake({
   emailFile,
   setEmailFile,
+  emailInputMode,
+  setEmailInputMode,
+  emailText,
+  setEmailText,
   emailReceivedDate,
   setEmailReceivedDate,
   emailBusy,
   emailAnalysis,
   emailStatus,
+  canAnalyzeEmail,
   onAnalyze,
   onApprove
 }) {
@@ -312,21 +317,68 @@ function EmailIntake({
       <div className="panelHead">
         <div>
           <div className="eyebrow">CONSULTANT EMAIL INTAKE</div>
-          <h2>Upload a consultant email</h2>
+          <h2>Upload or paste a consultant email</h2>
           <p>Arabic emails can be analyzed and converted into proposed recommendations and executable tasks.</p>
         </div>
       </div>
+
+      <div className="emailModeTabs">
+        <button
+          type="button"
+          className={emailInputMode === "file" ? "active" : ""}
+          onClick={() => {
+            setEmailInputMode("file");
+            setEmailText("");
+          }}
+        >
+          Upload file
+        </button>
+        <button
+          type="button"
+          className={emailInputMode === "paste" ? "active" : ""}
+          onClick={() => {
+            setEmailInputMode("paste");
+            setEmailFile(null);
+          }}
+        >
+          Paste email content
+        </button>
+      </div>
+
       <div className="emailForm">
-        <label className="upload">Choose email/document
-          <input type="file" accept=".eml,.txt,.html,.htm,.pdf,image/*" onChange={(e) => setEmailFile(e.target.files?.[0] || null)} />
-        </label>
+        {emailInputMode === "file" ? (
+          <label className="upload">Choose email/document
+            <input
+              type="file"
+              accept=".eml,.txt,.html,.htm,.pdf,image/*"
+              onChange={(e) => setEmailFile(e.target.files?.[0] || null)}
+            />
+          </label>
+        ) : (
+          <label className="pasteField">
+            Paste consultant email
+            <textarea
+              value={emailText}
+              onChange={(e) => setEmailText(e.target.value)}
+              placeholder="Paste the complete Arabic or English consultant email here..."
+              rows={12}
+              maxLength={200000}
+            />
+            <span className="fine">{emailText.length.toLocaleString()} / 200,000 characters</span>
+          </label>
+        )}
+
         <label>Recommendation received date <span className="fine">(optional)</span>
           <input type="date" value={emailReceivedDate} onChange={(e) => setEmailReceivedDate(e.target.value)} />
         </label>
-        <button className="primary" disabled={!emailFile || emailBusy} onClick={onAnalyze}>{emailBusy ? "Analyzing..." : "Analyze email"}</button>
+        <button className="primary" disabled={!canAnalyzeEmail || emailBusy} onClick={onAnalyze}>
+          {emailBusy ? "Analyzing..." : "Analyze email"}
+        </button>
       </div>
+
       {emailFile && <div className="notice">Selected: <b>{emailFile.name}</b> · {Math.round(emailFile.size / 1024)} KB</div>}
       {emailStatus && <div className="notice">{emailStatus}</div>}
+
       {emailAnalysis && (
         <div className="emailAnalysis">
           <div className="analysisTop">
@@ -342,7 +394,7 @@ function EmailIntake({
               <ul>{(rec.tasks || []).map((t, j) => <li key={j}><b>{t.title}</b>{t.due_date ? " · due " + t.due_date : " · no deadline stated"}</li>)}</ul>
             </article>
           ))}
-          <button className="primary" onClick={onApprove}>Add approved recommendations & tasks to tracker</button>
+          <button className="primary" onClick={onApprove} disabled={emailBusy}>Add approved recommendations & tasks to tracker</button>
           <p className="fine">Review the AI proposal before adding it. The source email is not treated as a legal or regulatory authority.</p>
         </div>
       )}
@@ -382,12 +434,34 @@ export default function Page() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setSession(data.session);
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!mounted) return;
+
+      if (data.session) {
+        const lastActivity = Number(window.localStorage.getItem(LAST_ACTIVITY_KEY) || "0");
+        if (lastActivity && Date.now() - lastActivity >= INACTIVITY_MS) {
+          await supabase.auth.signOut({ scope: "local" });
+          window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+          setAuthMsg("Your previous session expired after 10 minutes of inactivity. Please sign in again.");
+          setSession(null);
+          return;
+        }
+
+        window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        setSession(data.session);
+      }
     });
+
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (nextSession) {
+        window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      } else {
+        window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+      }
       setSession(nextSession);
     });
+
     return () => {
       mounted = false;
       data.subscription.unsubscribe();
@@ -395,18 +469,60 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    if (!session) return;
+
+    let lastActivity = Date.now();
+    const activityEvents = ["pointerdown", "keydown", "touchstart", "scroll", "mousemove"];
+
+    const markActivity = () => {
+      lastActivity = Date.now();
+      window.localStorage.setItem(LAST_ACTIVITY_KEY, String(lastActivity));
+    };
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, markActivity, { passive: true });
+    });
+
+    const timer = window.setInterval(async () => {
+      if (Date.now() - lastActivity >= INACTIVITY_MS) {
+        window.clearInterval(timer);
+        window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+        await supabase.auth.signOut({ scope: "local" });
+        setSession(null);
+        setAuthMsg("You were signed out after 10 minutes of inactivity. Please sign in again.");
+      }
+    }, 5000);
+
+    return () => {
+      window.clearInterval(timer);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, markActivity);
+      });
+    };
+  }, [session]);
+
+  useEffect(() => {
     if (session) loadData();
   }, [session]);
 
   async function auth(e) {
     e.preventDefault();
+
+    const now = Date.now();
+    if (now < loginBlockedUntil) {
+      const seconds = Math.ceil((loginBlockedUntil - now) / 1000);
+      setAuthMsg("Too many sign-in attempts. Try again in " + seconds + " seconds.");
+      return;
+    }
+
     setBusy(true);
     setAuthMsg("");
+
     const result =
       mode === "signin"
-        ? await supabase.auth.signInWithPassword({ email, password })
+        ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
         : await supabase.auth.signUp({
-            email,
+            email: email.trim(),
             password,
             options: {
               emailRedirectTo: window.location.origin
@@ -414,10 +530,24 @@ export default function Page() {
           });
 
     if (result.error) {
-      setAuthMsg(result.error.message);
-    } else if (mode === "signup") {
-      setAuthMsg("Account created. Check your email if confirmation is enabled.");
+      const nextFailures = loginFailures + 1;
+      if (nextFailures >= LOGIN_MAX_FAILURES) {
+        setLoginFailures(0);
+        setLoginBlockedUntil(Date.now() + LOGIN_LOCKOUT_MS);
+        setAuthMsg("Too many failed attempts. Sign-in is temporarily locked for 60 seconds.");
+      } else {
+        setLoginFailures(nextFailures);
+        setAuthMsg(result.error.message);
+      }
+    } else {
+      setLoginFailures(0);
+      setLoginBlockedUntil(0);
+      window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      if (mode === "signup") {
+        setAuthMsg("Account created. Check your email if confirmation is enabled.");
+      }
     }
+
     setBusy(false);
   }
 
@@ -703,37 +833,88 @@ export default function Page() {
   }
 
   async function analyzeEmail() {
-    if (!emailFile) return;
+    const hasPaste = emailInputMode === "paste" && emailText.trim().length > 0;
+    if (!emailFile && !hasPaste) return;
+
     setEmailBusy(true); setEmailStatus(""); setEmailAnalysis(null); setError("");
+
     try {
-      const payload = await readFilePayload(emailFile);
-      const safeName = emailFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      let sourceFile = emailFile;
+      let payload;
+
+      if (emailInputMode === "paste") {
+        sourceFile = new File(
+          [emailText.trim()],
+          "pasted-consultant-email.txt",
+          { type: "text/plain" }
+        );
+        setEmailFile(sourceFile);
+        payload = { file_base64: null, content: emailText.trim() };
+      } else {
+        payload = await readFilePayload(emailFile);
+      }
+
+      const safeName = sourceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const storagePath = session.user.id + "/" + crypto.randomUUID() + "-" + safeName;
-      const upload = await supabase.storage.from("monshaat-email-source").upload(storagePath, emailFile, { upsert: false, contentType: emailFile.type || "application/octet-stream" });
+
+      const upload = await supabase.storage
+        .from("monshaat-email-source")
+        .upload(storagePath, sourceFile, {
+          upsert: false,
+          contentType: sourceFile.type || "text/plain"
+        });
+
       if (upload.error) throw upload.error;
-      const inserted = await supabase.from("monshaat_emails").insert({
-        uploaded_by: session.user.id,
-        file_name: emailFile.name,
-        mime_type: emailFile.type || "text/plain",
-        storage_path: storagePath,
-        received_at: emailReceivedDate ? new Date(emailReceivedDate + "T00:00:00").toISOString() : null,
-        raw_text: payload.content || "[binary document stored privately in Supabase Storage]",
-        language: "ar",
-        status: "uploaded"
-      }).select().single();
+
+      const inserted = await supabase
+        .from("monshaat_emails")
+        .insert({
+          uploaded_by: session.user.id,
+          file_name: sourceFile.name,
+          mime_type: sourceFile.type || "text/plain",
+          storage_path: storagePath,
+          received_at: emailReceivedDate
+            ? new Date(emailReceivedDate + "T00:00:00").toISOString()
+            : null,
+          raw_text: payload.content || "[binary document stored privately in Supabase Storage]",
+          language: "ar",
+          status: "uploaded"
+        })
+        .select()
+        .single();
+
       if (inserted.error) throw inserted.error;
       setEmailRecordId(inserted.data.id);
+
       const { data, error: fnError } = await supabase.functions.invoke("analyze-document", {
-        body: { mode: "email", filename: emailFile.name, mime_type: emailFile.type || "text/plain", ...payload }
+        body: {
+          mode: "email",
+          filename: sourceFile.name,
+          mime_type: sourceFile.type || "text/plain",
+          ...payload
+        }
       });
+
       if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
+
       setEmailAnalysis(data.result);
-      await supabase.from("monshaat_emails").update({ status: "analyzed", analysis: data.result, updated_at: new Date().toISOString() }).eq("id", inserted.data.id);
+      await supabase
+        .from("monshaat_emails")
+        .update({
+          status: "analyzed",
+          analysis: data.result,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", inserted.data.id);
+
       setEmailStatus("Analysis complete. Review the proposed actions before adding them to the tracker.");
     } catch (e) {
-      setEmailStatus(""); setError(e.message || "Email analysis failed.");
-    } finally { setEmailBusy(false); }
+      setEmailStatus("");
+      setError(e.message || "Email analysis failed.");
+    } finally {
+      setEmailBusy(false);
+    }
   }
 
   async function approveEmailAnalysis() {
@@ -919,7 +1100,7 @@ export default function Page() {
         </div>
         <div className="heroActions">
           <span>{session.user.email}</span>
-          <button onClick={() => supabase.auth.signOut()}>Sign out</button>
+          <button onClick={async () => { window.localStorage.removeItem(LAST_ACTIVITY_KEY); await supabase.auth.signOut({ scope: "local" }); }}>Sign out</button>
         </div>
       </header>
 
@@ -937,11 +1118,16 @@ export default function Page() {
         <EmailIntake
           emailFile={emailFile}
           setEmailFile={setEmailFile}
+          emailInputMode={emailInputMode}
+          setEmailInputMode={setEmailInputMode}
+          emailText={emailText}
+          setEmailText={setEmailText}
           emailReceivedDate={emailReceivedDate}
           setEmailReceivedDate={setEmailReceivedDate}
           emailBusy={emailBusy}
           emailAnalysis={emailAnalysis}
           emailStatus={emailStatus}
+          canAnalyzeEmail={emailInputMode === "paste" ? emailText.trim().length > 0 : !!emailFile}
           onAnalyze={analyzeEmail}
           onApprove={approveEmailAnalysis}
         />
