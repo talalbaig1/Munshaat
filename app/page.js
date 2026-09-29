@@ -93,9 +93,12 @@ function TaskCard({
   reviewEvidence,
   analyzeEvidence,
   evidenceAnalysis,
-  recommendations
+  recommendations,
+  addUrlEvidence
 }) {
   const isOpen = expanded === task.id;
+  const [evidenceMode, setEvidenceMode] = useState("file");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
   const ev = evidence[task.id] || [];
   const qs = questions[task.id] || [];
   const recommendation = recommendations.find((r) => r.id === task.recommendation_id);
@@ -248,44 +251,61 @@ function TaskCard({
 
             <section>
               <h3>Evidence</h3>
-              <label className="upload">
-                Upload evidence
-                <input
-                  type="file"
-                  onChange={(e) => uploadEvidence(task, e.target.files?.[0])}
-                />
-              </label>
+              <div className="evidenceModes">
+                <button type="button" className={evidenceMode === "file" ? "active" : ""} onClick={() => setEvidenceMode("file")}>
+                  Picture / File
+                </button>
+                <button type="button" className={evidenceMode === "url" ? "active" : ""} onClick={() => setEvidenceMode("url")}>
+                  Web URL
+                </button>
+              </div>
+              {evidenceMode === "file" ? (
+                <label className="upload">
+                  Upload picture or file
+                  <input type="file" onChange={(e) => uploadEvidence(task, e.target.files?.[0])} />
+                </label>
+              ) : (
+                <div className="evidenceUrlForm">
+                  <input
+                    type="url"
+                    value={evidenceUrl}
+                    placeholder="https://example.com/evidence"
+                    onChange={(e) => setEvidenceUrl(e.target.value)}
+                  />
+                  <button
+                    className="small"
+                    type="button"
+                    onClick={async () => {
+                      const saved = await addUrlEvidence(task, evidenceUrl);
+                      if (saved) setEvidenceUrl("");
+                    }}
+                  >
+                    Add URL
+                  </button>
+                </div>
+              )}
               <div className="items">
                 {ev.map((item) => (
                   <div className="item evidence" key={item.id}>
                     <span>
-                      📎 {item.file_name}
+                      {item.evidence_type === "url" ? "🔗" : item.evidence_type === "image" ? "🖼️" : "📎"}{" "}
+                      {item.evidence_type === "url" ? item.source_url : item.file_name}
                       <small>
-                        {bytes(item.file_size)} · {item.verification_status}
+                        {item.evidence_type === "url" ? "Web URL" : bytes(item.file_size) + " · " + (item.mime_type || "file")} · {item.verification_status}
                       </small>
                     </span>
                     <div>
-                      <button className="tiny" onClick={() => openEvidence(item)}>
-                        Open
-                      </button>
-                      <button className="tiny" onClick={() => analyzeEvidence(item, task)}>
-                        Analyze AI
-                      </button>
-                      <select
-                        value={item.verification_status}
-                        onChange={(e) => reviewEvidence(item, e.target.value)}
-                      >
+                      <button className="tiny" onClick={() => openEvidence(item)}>Open</button>
+                      {item.evidence_type !== "url" && (
+                        <button className="tiny" onClick={() => analyzeEvidence(item, task)}>Analyze AI</button>
+                      )}
+                      <select value={item.verification_status} onChange={(e) => reviewEvidence(item, e.target.value)}>
                         <option value="pending">Pending</option>
                         <option value="needs_review">Needs Review</option>
                         <option value="verified">Verified</option>
                         <option value="rejected">Rejected</option>
                       </select>
-                      <button
-                        className="tiny danger"
-                        onClick={() => deleteEvidence(item, task.id)}
-                      >
-                        Delete
-                      </button>
+                      <button className="tiny danger" onClick={() => deleteEvidence(item, task.id)}>Delete</button>
                     </div>
                   </div>
                 ))}
@@ -301,7 +321,7 @@ function TaskCard({
                 </div>
               ))}
               <p className="fine">
-                Files remain in private Supabase Storage. AI review is advisory and never auto-completes a task.
+                Pictures and files remain in private Supabase Storage. Web URLs are stored in the database. AI review is advisory and never auto-completes a task.
               </p>
             </section>
           </div>
@@ -704,6 +724,10 @@ export default function Page() {
 
   async function uploadEvidence(task, file) {
     if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Evidence files must be 15 MB or smaller.");
+      return;
+    }
     setBusy(true);
 
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -735,7 +759,9 @@ export default function Page() {
         mime_type: file.type || "application/octet-stream",
         file_size: file.size,
         uploaded_by: session.user.id,
-        verification_status: "pending"
+        verification_status: "pending",
+        evidence_type: file.type.startsWith("image/") ? "image" : "file",
+        source_url: null
       })
       .select()
       .single();
@@ -753,6 +779,11 @@ export default function Page() {
   }
 
   async function openEvidence(item) {
+    if (item.evidence_type === "url") {
+      window.open(item.source_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     const result = await supabase.storage
       .from("monshaat-evidence")
       .createSignedUrl(item.storage_path, 300);
@@ -765,15 +796,19 @@ export default function Page() {
   }
 
   async function deleteEvidence(item, taskId) {
-    if (!confirm("Delete this evidence file?")) return;
+    if (!confirm("Delete this evidence item?")) return;
     setBusy(true);
 
-    const removed = await supabase.storage
-      .from("monshaat-evidence")
-      .remove([item.storage_path]);
+    let storageError = null;
+    if (item.storage_path) {
+      const removed = await supabase.storage
+        .from("monshaat-evidence")
+        .remove([item.storage_path]);
+      storageError = removed.error;
+    }
 
-    if (removed.error) {
-      setError(removed.error.message);
+    if (storageError) {
+      setError(storageError.message);
     } else {
       const result = await supabase
         .from("monshaat_evidence")
@@ -817,6 +852,10 @@ export default function Page() {
   }
 
   async function analyzeEvidence(item, task) {
+    if (item.evidence_type === "url") {
+      setError("AI analysis is currently available for uploaded pictures/files, not external web URLs.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -849,6 +888,54 @@ export default function Page() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addUrlEvidence(task, value) {
+    const raw = value.trim();
+    if (!raw) return false;
+
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      setError("Enter a valid web URL beginning with http:// or https://.");
+      return false;
+    }
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      setError("Only http:// and https:// web URLs can be saved as evidence.");
+      return false;
+    }
+
+    setBusy(true);
+    const result = await supabase
+      .from("monshaat_evidence")
+      .insert({
+        task_id: task.id,
+        storage_path: null,
+        file_name: parsed.hostname || parsed.href,
+        mime_type: "text/uri-list",
+        file_size: null,
+        uploaded_by: session.user.id,
+        verification_status: "pending",
+        evidence_type: "url",
+        source_url: parsed.href
+      })
+      .select()
+      .single();
+
+    if (result.error) {
+      setError(result.error.message);
+      setBusy(false);
+      return false;
+    }
+
+    setEvidence((current) => ({
+      ...current,
+      [task.id]: [result.data, ...(current[task.id] || [])]
+    }));
+    setBusy(false);
+    return true;
   }
 
   async function readFilePayload(file) {
@@ -1288,6 +1375,7 @@ export default function Page() {
             addQuestion={addQuestion}
             updateQuestionStatus={updateQuestionStatus}
             uploadEvidence={uploadEvidence}
+            addUrlEvidence={addUrlEvidence}
             openEvidence={openEvidence}
             deleteEvidence={deleteEvidence}
             reviewEvidence={reviewEvidence}
