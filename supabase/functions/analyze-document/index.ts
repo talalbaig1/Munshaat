@@ -198,42 +198,96 @@ Deno.serve(async (req: Request) => {
       userContent = prompt + "\n\n<untrusted-document>\n" + content + "\n</untrusted-document>";
     }
 
-    const ai = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + apiKey,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://munshaat.vercel.app",
-        "X-OpenRouter-Title": "Munshaat Action Tracker"
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        temperature: 0.1,
-        max_tokens: 4000,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt },
-          { role: "user", content: userContent }
-        ]
-      })
-    });
+    const aiRequest = {
+      model: MODEL,
+      temperature: 0.1,
+      max_tokens: 4000,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: prompt },
+        { role: "user", content: userContent }
+      ]
+    };
 
-    const payload = await ai.json();
+    let lastError = "OpenRouter request failed.";
+    let payload: any = null;
 
-    if (!ai.ok) {
-      return response({ error: payload?.error?.message || "OpenRouter request failed" }, ai.status, origin);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45_000);
+
+        const ai = await fetch(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + apiKey,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://munshaat.vercel.app",
+            "X-OpenRouter-Title": "Munshaat Action Tracker"
+          },
+          body: JSON.stringify(aiRequest),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        const raw = await ai.text();
+        try {
+          payload = raw ? JSON.parse(raw) : {};
+        } catch {
+          payload = {};
+        }
+
+        if (!ai.ok) {
+          lastError = payload?.error?.message || ("OpenRouter returned HTTP " + ai.status);
+          if (ai.status === 429 || ai.status >= 500) {
+            if (attempt < 3) {
+              await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+              continue;
+            }
+          }
+          return response({ error: lastError }, ai.status, origin);
+        }
+
+        const text = payload?.choices?.[0]?.message?.content;
+        if (!text) {
+          lastError = "AI provider returned a successful response without content.";
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+            continue;
+          }
+          return response({ error: lastError }, 502, origin);
+        }
+
+        try {
+          const result = parseJson(text);
+          return response(
+            { result, model: payload.model || MODEL },
+            200,
+            origin
+          );
+        } catch (parseError) {
+          lastError = parseError instanceof Error ? parseError.message : "AI returned invalid JSON";
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+            continue;
+          }
+          return response({ error: lastError }, 502, origin);
+        }
+      } catch (error) {
+        lastError = error instanceof Error && error.name === "AbortError"
+          ? "OpenRouter analysis timed out after 45 seconds."
+          : error instanceof Error
+            ? error.message
+            : "OpenRouter request failed.";
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+          continue;
+        }
+      }
     }
 
-    const text = payload?.choices?.[0]?.message?.content;
-    if (!text) {
-      return response({ error: "AI returned no content." }, 502, origin);
-    }
-
-    return response(
-      { result: parseJson(text), model: payload.model || MODEL },
-      200,
-      origin
-    );
+    return response({ error: lastError }, 502, origin);
   } catch (error) {
     return response(
       { error: error instanceof Error ? error.message : "Unexpected analysis error" },
