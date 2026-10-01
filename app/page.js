@@ -12,16 +12,79 @@ const STATUS_LABELS = {
   needs_verification: "Needs Verification"
 };
 
-function getEmailAnalysisCounts(analysis) {
+function normalizeDeduplicationKey(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getEmailTaskKey(task) {
+  return normalizeDeduplicationKey(task?.title);
+}
+
+function deduplicateEmailAnalysis(analysis) {
+  const recommendations = Array.isArray(analysis?.recommendations) ? analysis.recommendations : [];
+  const uniqueRecommendations = [];
+  const recommendationByKey = new Map();
+  const seenTaskKeys = new Set();
+  let duplicateRecommendations = 0;
+  let duplicateTasks = 0;
+
+  for (const recommendation of recommendations) {
+    const recommendationCopy = {
+      ...recommendation,
+      tasks: Array.isArray(recommendation?.tasks) ? [...recommendation.tasks] : []
+    };
+    const recommendationKey = normalizeDeduplicationKey(recommendation?.title);
+    const existingRecommendation = recommendationKey ? recommendationByKey.get(recommendationKey) : null;
+
+    if (existingRecommendation) {
+      duplicateRecommendations += 1;
+      existingRecommendation.tasks.push(...recommendationCopy.tasks);
+      continue;
+    }
+
+    uniqueRecommendations.push(recommendationCopy);
+    if (recommendationKey) recommendationByKey.set(recommendationKey, recommendationCopy);
+  }
+
+  for (const recommendation of uniqueRecommendations) {
+    recommendation.tasks = recommendation.tasks.filter((task) => {
+      const taskKey = getEmailTaskKey(task);
+      if (!taskKey || seenTaskKeys.has(taskKey)) {
+        if (taskKey) duplicateTasks += 1;
+        return !taskKey;
+      }
+      seenTaskKeys.add(taskKey);
+      return true;
+    });
+  }
+
+  return {
+    analysis: { ...analysis, recommendations: uniqueRecommendations },
+    duplicateRecommendations,
+    duplicateTasks
+  };
+}
+
+function getEmailAnalysisCounts(analysis, existingTasks = []) {
   const recommendations = Array.isArray(analysis?.recommendations)
     ? analysis.recommendations
     : [];
-  const tasks = recommendations.reduce(
-    (total, recommendation) => total + (Array.isArray(recommendation?.tasks) ? recommendation.tasks.length : 0),
-    0
-  );
+  const existingTaskKeys = new Set(existingTasks.map(getEmailTaskKey).filter(Boolean));
+  const tasks = recommendations.flatMap((recommendation) => Array.isArray(recommendation?.tasks) ? recommendation.tasks : []);
+  const tasksAlreadyInTracker = tasks.filter((task) => existingTaskKeys.has(getEmailTaskKey(task))).length;
 
-  return { recommendations: recommendations.length, tasks };
+  return {
+    recommendations: recommendations.length,
+    tasks: tasks.length,
+    tasksAlreadyInTracker,
+    tasksToAdd: tasks.length - tasksAlreadyInTracker
+  };
 }
 const PRIORITIES = ["critical", "high", "medium", "low"];
 const INACTIVITY_MS = 10 * 60 * 1000;
@@ -451,12 +514,14 @@ function EmailIntake({
   setEmailReceivedDate,
   emailBusy,
   emailAnalysis,
+  emailDeduplication,
+  tasks,
   emailStatus,
   canAnalyzeEmail,
   onAnalyze,
   onApprove
 }) {
-  const counts = getEmailAnalysisCounts(emailAnalysis);
+  const counts = getEmailAnalysisCounts(emailAnalysis, tasks);
 
   return (
     <section className="emailPanel">
@@ -540,9 +605,13 @@ function EmailIntake({
             <div className="reconciliationCounts">
               <div><span>Recommendations discovered</span><strong>{counts.recommendations}</strong></div>
               <div><span>Tasks contained in recommendations</span><strong>{counts.tasks}</strong></div>
-              <div><span>Tasks to be added to tracker</span><strong>{counts.tasks}</strong></div>
+              <div><span>Already in tracker</span><strong>{counts.tasksAlreadyInTracker}</strong></div>
+              <div><span>New tasks to be added</span><strong>{counts.tasksToAdd}</strong></div>
             </div>
-            <div className="fine">Approval adds all {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and exactly {counts.tasks} task{counts.tasks === 1 ? "" : "s"} shown below.</div>
+            {emailDeduplication?.duplicateRecommendations + emailDeduplication?.duplicateTasks > 0 && (
+              <div className="dedupeNotice">Removed {emailDeduplication.duplicateRecommendations} duplicate recommendation{emailDeduplication.duplicateRecommendations === 1 ? "" : "s"} and {emailDeduplication.duplicateTasks} duplicate task{emailDeduplication.duplicateTasks === 1 ? "" : "s"} from this email.</div>
+            )}
+            <div className="fine">Approval adds all {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and exactly {counts.tasksToAdd} new task{counts.tasksToAdd === 1 ? "" : "s"}. Existing tracker tasks will not be duplicated.</div>
           </div>
           <p>{emailAnalysis.summary}</p>
           {(emailAnalysis.recommendations || []).map((rec, i) => (
@@ -564,7 +633,7 @@ function EmailIntake({
               ))}</ul>
             </article>
           ))}
-          <button className="primary" onClick={onApprove} disabled={emailBusy || counts.recommendations === 0}>Add {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and {counts.tasks} task{counts.tasks === 1 ? "" : "s"} to tracker</button>
+          <button className="primary" onClick={onApprove} disabled={emailBusy || counts.recommendations === 0}>Add {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and {counts.tasksToAdd} new task{counts.tasksToAdd === 1 ? "" : "s"} to tracker</button>
           <p className="fine">Review the AI proposal before adding it. The source email is not treated as a legal or regulatory authority.</p>
         </div>
       )}
@@ -605,6 +674,7 @@ export default function Page() {
   const [emailReceivedDate, setEmailReceivedDate] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailAnalysis, setEmailAnalysis] = useState(null);
+  const [emailDeduplication, setEmailDeduplication] = useState({ duplicateRecommendations: 0, duplicateTasks: 0 });
   const [emailStatus, setEmailStatus] = useState("");
   const [emailRecordId, setEmailRecordId] = useState(null);
   const [evidenceAnalysis, setEvidenceAnalysis] = useState({});
@@ -1092,7 +1162,7 @@ export default function Page() {
     const hasPaste = emailInputMode === "paste" && emailText.trim().length > 0;
     if (!emailFile && !hasPaste) return;
 
-    setEmailBusy(true); setEmailStatus(""); setEmailAnalysis(null); setError("");
+    setEmailBusy(true); setEmailStatus(""); setEmailAnalysis(null); setEmailDeduplication({ duplicateRecommendations: 0, duplicateTasks: 0 }); setError("");
 
     try {
       let sourceFile = emailFile;
@@ -1164,17 +1234,22 @@ export default function Page() {
       if (data?.error) throw new Error(data.error);
       if (!data?.result) throw new Error("AI analysis returned no structured result.");
 
-      setEmailAnalysis(data.result);
+      const cleanedAnalysis = deduplicateEmailAnalysis(data.result);
+      setEmailAnalysis(cleanedAnalysis.analysis);
+      setEmailDeduplication(cleanedAnalysis);
       await supabase
         .from("monshaat_emails")
         .update({
           status: "analyzed",
-          analysis: data.result,
+          analysis: cleanedAnalysis.analysis,
           updated_at: new Date().toISOString()
         })
         .eq("id", inserted.data.id);
 
-      setEmailStatus("Analysis complete. Review the proposed actions before adding them to the tracker.");
+      const duplicateSummary = cleanedAnalysis.duplicateRecommendations + cleanedAnalysis.duplicateTasks > 0
+        ? ` Removed ${cleanedAnalysis.duplicateRecommendations} duplicate recommendation${cleanedAnalysis.duplicateRecommendations === 1 ? "" : "s"} and ${cleanedAnalysis.duplicateTasks} duplicate task${cleanedAnalysis.duplicateTasks === 1 ? "" : "s"}.`
+        : "";
+      setEmailStatus("Analysis complete. Review the proposed actions before adding them to the tracker." + duplicateSummary);
     } catch (e) {
       setEmailStatus("");
       setError(e.message || "Email analysis failed.");
@@ -1186,9 +1261,10 @@ export default function Page() {
   async function approveEmailAnalysis() {
     if (!emailAnalysis || !emailRecordId) return;
     setEmailBusy(true); setError("");
-    const counts = getEmailAnalysisCounts(emailAnalysis);
+    const counts = getEmailAnalysisCounts(emailAnalysis, tasks);
     let addedRecommendations = 0;
     let addedTasks = 0;
+    let skippedExistingTasks = 0;
     try {
       if (counts.recommendations === 0) {
         throw new Error("There are no recommendations to add from this email.");
@@ -1202,6 +1278,8 @@ export default function Page() {
       if ((existing.data || []).length > 0) {
         throw new Error("This email has already been added to the tracker. Refresh the page to review the current tasks.");
       }
+
+      const existingTaskKeys = new Set(tasks.map(getEmailTaskKey).filter(Boolean));
 
       const consultantName = emailAnalysis.consultant_name;
       const matched = consultants.find((c) => consultantName && c.name.toLowerCase() === consultantName.toLowerCase()) || consultants.find((c) => consultantName && c.name.toLowerCase().includes(consultantName.toLowerCase()));
@@ -1227,6 +1305,11 @@ export default function Page() {
         if (recInsert.error) throw recInsert.error;
         addedRecommendations += 1;
         for (const t of Array.isArray(rec.tasks) ? rec.tasks : []) {
+          const taskKey = getEmailTaskKey(t);
+          if (taskKey && existingTaskKeys.has(taskKey)) {
+            skippedExistingTasks += 1;
+            continue;
+          }
           const taskInsert = await supabase.from("monshaat_tasks").insert({
             owner_id: session.user.id,
             recommendation_id: recInsert.data.id,
@@ -1243,21 +1326,25 @@ export default function Page() {
           if (taskInsert.error) throw taskInsert.error;
           if (!taskInsert.data?.id) throw new Error("A task insert was not confirmed by Supabase.");
           addedTasks += 1;
+          if (taskKey) existingTaskKeys.add(taskKey);
         }
       }
 
-      if (addedRecommendations !== counts.recommendations || addedTasks !== counts.tasks) {
-        throw new Error(`Approval count mismatch: added ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasks} tasks.`);
+      if (addedRecommendations !== counts.recommendations || addedTasks !== counts.tasksToAdd) {
+        throw new Error(`Approval count mismatch: added ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasksToAdd} new tasks.`);
       }
 
       const emailUpdate = await supabase.from("monshaat_emails").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", emailRecordId);
       if (emailUpdate.error) throw emailUpdate.error;
-      setEmailStatus(`Added ${addedRecommendations} recommendation${addedRecommendations === 1 ? "" : "s"} and ${addedTasks} task${addedTasks === 1 ? "" : "s"} to the tracker. The counts match the analyzed email.`);
+      const skippedSummary = skippedExistingTasks > 0
+        ? ` Skipped ${skippedExistingTasks} task${skippedExistingTasks === 1 ? "" : "s"} already present in the tracker.`
+        : "";
+      setEmailStatus(`Added ${addedRecommendations} recommendation${addedRecommendations === 1 ? "" : "s"} and ${addedTasks} new task${addedTasks === 1 ? "" : "s"} to the tracker. The counts match the analyzed email.${skippedSummary}`);
       await loadData();
-      setEmailAnalysis(null); setEmailFile(null); setEmailRecordId(null);
+      setEmailAnalysis(null); setEmailDeduplication({ duplicateRecommendations: 0, duplicateTasks: 0 }); setEmailFile(null); setEmailRecordId(null);
     } catch (e) {
       const progress = addedRecommendations || addedTasks
-        ? ` Approval stopped after ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasks} tasks were confirmed; the email was not marked converted.`
+        ? ` Approval stopped after ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasksToAdd} new tasks were confirmed; the email was not marked converted.`
         : "";
       setError((e.message || "Could not add the email actions.") + progress);
     }
@@ -1480,6 +1567,8 @@ export default function Page() {
           setEmailReceivedDate={setEmailReceivedDate}
           emailBusy={emailBusy}
           emailAnalysis={emailAnalysis}
+          emailDeduplication={emailDeduplication}
+          tasks={tasks}
           emailStatus={emailStatus}
           canAnalyzeEmail={emailInputMode === "paste" ? emailText.trim().length > 0 : !!emailFile}
           onAnalyze={analyzeEmail}
