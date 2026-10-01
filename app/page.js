@@ -11,6 +11,18 @@ const STATUS_LABELS = {
   completed: "Completed",
   needs_verification: "Needs Verification"
 };
+
+function getEmailAnalysisCounts(analysis) {
+  const recommendations = Array.isArray(analysis?.recommendations)
+    ? analysis.recommendations
+    : [];
+  const tasks = recommendations.reduce(
+    (total, recommendation) => total + (Array.isArray(recommendation?.tasks) ? recommendation.tasks.length : 0),
+    0
+  );
+
+  return { recommendations: recommendations.length, tasks };
+}
 const PRIORITIES = ["critical", "high", "medium", "low"];
 const INACTIVITY_MS = 10 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
@@ -444,6 +456,8 @@ function EmailIntake({
   onAnalyze,
   onApprove
 }) {
+  const counts = getEmailAnalysisCounts(emailAnalysis);
+
   return (
     <section className="emailPanel">
       <div className="panelHead">
@@ -518,10 +532,22 @@ function EmailIntake({
             <div><b>Consultant:</b> {emailAnalysis.consultant_name || "Not identified"}</div>
             <div><b>Received:</b> {emailAnalysis.received_date || emailReceivedDate || "Not identified"}</div>
           </div>
+          <div className="reconciliationSummary" aria-label="Email analysis counts">
+            <div className="reconciliationIntro">
+              <b>Before approval</b>
+              <span>These are separate counts: recommendations are the AI findings; tasks are the executable items nested inside them.</span>
+            </div>
+            <div className="reconciliationCounts">
+              <div><span>Recommendations discovered</span><strong>{counts.recommendations}</strong></div>
+              <div><span>Tasks contained in recommendations</span><strong>{counts.tasks}</strong></div>
+              <div><span>Tasks to be added to tracker</span><strong>{counts.tasks}</strong></div>
+            </div>
+            <div className="fine">Approval adds all {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and exactly {counts.tasks} task{counts.tasks === 1 ? "" : "s"} shown below.</div>
+          </div>
           <p>{emailAnalysis.summary}</p>
           {(emailAnalysis.recommendations || []).map((rec, i) => (
             <article className="proposal" key={i}>
-              <div className="taskTop"><span className={"priority " + rec.priority}>{rec.priority}</span><b>{rec.title}</b></div>
+              <div className="taskTop"><span className={"priority " + rec.priority}>{rec.priority}</span><b>Recommendation {i + 1}: {rec.title}</b><span className="countTag">{Array.isArray(rec.tasks) ? rec.tasks.length : 0} task{Array.isArray(rec.tasks) && rec.tasks.length === 1 ? "" : "s"}</span></div>
               <p>{rec.description}</p>
               {rec.original_arabic && (
                 <div className="originalArabic proposalArabic">
@@ -538,7 +564,7 @@ function EmailIntake({
               ))}</ul>
             </article>
           ))}
-          <button className="primary" onClick={onApprove} disabled={emailBusy}>Add approved recommendations & tasks to tracker</button>
+          <button className="primary" onClick={onApprove} disabled={emailBusy || counts.recommendations === 0}>Add {counts.recommendations} recommendation{counts.recommendations === 1 ? "" : "s"} and {counts.tasks} task{counts.tasks === 1 ? "" : "s"} to tracker</button>
           <p className="fine">Review the AI proposal before adding it. The source email is not treated as a legal or regulatory authority.</p>
         </div>
       )}
@@ -1160,7 +1186,23 @@ export default function Page() {
   async function approveEmailAnalysis() {
     if (!emailAnalysis || !emailRecordId) return;
     setEmailBusy(true); setError("");
+    const counts = getEmailAnalysisCounts(emailAnalysis);
+    let addedRecommendations = 0;
+    let addedTasks = 0;
     try {
+      if (counts.recommendations === 0) {
+        throw new Error("There are no recommendations to add from this email.");
+      }
+
+      const existing = await supabase
+        .from("monshaat_recommendations")
+        .select("id")
+        .eq("source_email_id", emailRecordId);
+      if (existing.error) throw existing.error;
+      if ((existing.data || []).length > 0) {
+        throw new Error("This email has already been added to the tracker. Refresh the page to review the current tasks.");
+      }
+
       const consultantName = emailAnalysis.consultant_name;
       const matched = consultants.find((c) => consultantName && c.name.toLowerCase() === consultantName.toLowerCase()) || consultants.find((c) => consultantName && c.name.toLowerCase().includes(consultantName.toLowerCase()));
       const sessionInsert = await supabase.from("monshaat_sessions").insert({
@@ -1183,7 +1225,8 @@ export default function Page() {
           source_email_id: emailRecordId
         }).select().single();
         if (recInsert.error) throw recInsert.error;
-        for (const t of rec.tasks || []) {
+        addedRecommendations += 1;
+        for (const t of Array.isArray(rec.tasks) ? rec.tasks : []) {
           const taskInsert = await supabase.from("monshaat_tasks").insert({
             owner_id: session.user.id,
             recommendation_id: recInsert.data.id,
@@ -1196,15 +1239,28 @@ export default function Page() {
             status: "open",
             progress: 0,
             source: "Consultant: " + (consultantName || "Unidentified") + " · email: " + (emailFile?.name || "uploaded email")
-          });
+          }).select("id").single();
           if (taskInsert.error) throw taskInsert.error;
+          if (!taskInsert.data?.id) throw new Error("A task insert was not confirmed by Supabase.");
+          addedTasks += 1;
         }
       }
-      await supabase.from("monshaat_emails").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", emailRecordId);
-      setEmailStatus("Approved recommendations and tasks have been added to the tracker.");
+
+      if (addedRecommendations !== counts.recommendations || addedTasks !== counts.tasks) {
+        throw new Error(`Approval count mismatch: added ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasks} tasks.`);
+      }
+
+      const emailUpdate = await supabase.from("monshaat_emails").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", emailRecordId);
+      if (emailUpdate.error) throw emailUpdate.error;
+      setEmailStatus(`Added ${addedRecommendations} recommendation${addedRecommendations === 1 ? "" : "s"} and ${addedTasks} task${addedTasks === 1 ? "" : "s"} to the tracker. The counts match the analyzed email.`);
       await loadData();
       setEmailAnalysis(null); setEmailFile(null); setEmailRecordId(null);
-    } catch (e) { setError(e.message || "Could not add the email actions."); }
+    } catch (e) {
+      const progress = addedRecommendations || addedTasks
+        ? ` Approval stopped after ${addedRecommendations} of ${counts.recommendations} recommendations and ${addedTasks} of ${counts.tasks} tasks were confirmed; the email was not marked converted.`
+        : "";
+      setError((e.message || "Could not add the email actions.") + progress);
+    }
     finally { setEmailBusy(false); }
   }
 
