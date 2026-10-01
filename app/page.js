@@ -1125,8 +1125,18 @@ export default function Page() {
         }
       });
 
-      if (fnError) throw fnError;
+      if (fnError) {
+        let detail = fnError.message || "Edge Function request failed.";
+        try {
+          const body = fnError.context && typeof fnError.context.json === "function"
+            ? await fnError.context.json()
+            : null;
+          if (body?.error) detail = body.error;
+        } catch {}
+        throw new Error(detail);
+      }
       if (data?.error) throw new Error(data.error);
+      if (!data?.result) throw new Error("AI analysis returned no structured result.");
 
       setEmailAnalysis(data.result);
       await supabase
